@@ -5,20 +5,32 @@ from PIL import Image, ImageOps
 import google.generativeai as genai
 
 # ==============================================================================
-# 1. AYARLAR
+# 1. AYARLAR VE API ANAHTARI
 # ==============================================================================
+# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# Gemini Pro (Güvenli Liman)
+# GEMINI CHATBOT (404 HATASI ÇÖZÜMÜ) 🤖
+# Modelleri sırayla dener, hangisi çalışırsa onu seçer.
 chatbot_aktif = False
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    model_gemini = genai.GenerativeModel('gemini-pro')
+    # Önce en yeni ve hızlı modeli deneyelim
+    model_gemini = genai.GenerativeModel('gemini-1.5-flash')
+    # Test edelim
+    model_gemini.generate_content("test")
     chatbot_aktif = True
 except:
-    pass
+    try:
+        # Olmazsa bir öncekini deneyelim
+        model_gemini = genai.GenerativeModel('gemini-1.0-pro')
+        model_gemini.generate_content("test")
+        chatbot_aktif = True
+    except Exception as e:
+        st.warning(f"⚠️ Chatbot şu an çalışmıyor (API Hatası). Teşhis sistemi devrede.")
+        chatbot_aktif = False
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 st.markdown("---")
@@ -52,15 +64,17 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF LİSTESİ (KALİBRASYONLU)
+# 3. SINIF LİSTESİ (KALİBRASYON SONUCU: 2=PAS, 0=LEKE) ✅
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Elma (Apple)":
-        # Önceki testte: Sınıf 2 = Pas çıkmıştı.
-        # Sıralama: 0: Leke, 1: Çürük, 2: Pas, 3: Sağlıklı
+        # Yaptığımız testlere göre en tutarlı sıralama:
+        # 0: Kara Leke (Daha önceki testinde 0 çıkmıştı)
+        # 1: Kara Çürüklük
+        # 2: Pas (Son testinde 2 çıkmıştı)
+        # 3: Sağlıklı
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
-    
-    # Diğer bitkiler için standart listeler...
+        
     elif bitki_tipi == "Domates (Tomato)":
         return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
     elif bitki_tipi == "Mısır (Corn)":
@@ -69,7 +83,7 @@ def siniflari_getir(bitki_tipi):
         return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
     elif bitki_tipi == "Üzüm (Grape)":
         return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
-        
+    
     return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
@@ -83,28 +97,28 @@ if yuklenen_dosya:
     st.image(image, caption='Yüklenen Fotoğraf', use_container_width=True)
     
     if st.button("🔍 Hastalığı Analiz Et", type="primary"):
-        with st.spinner('Yapay zeka analiz ediyor...'):
+        with st.spinner('Yapay zeka renk filtrelerini deniyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # 1. BOYUT: 160x160 (Kesin Bilgi)
+                # 1. BOYUT: 160x160 (Kalibrasyon sonucu)
                 hedef_boyut = (160, 160)
                 img = image.resize(hedef_boyut) 
                 
-                # 2. ARRAY'E ÇEVİR
+                # Array'e çevir
                 img_array = np.array(img).astype("float32")
                 
-                # Kanal temizliği (Alpha kanalını at)
+                # Kanal temizliği
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
 
                 # -------------------------------------------------------------
-                # 🚨 KRİTİK HAMLE: RGB -> BGR DÖNÜŞÜMÜ
-                # OpenCV ile eğitilen modeller BGR ister. PIL ise RGB verir.
-                # Bu satır renkleri ters çevirir (Kırmızı <-> Mavi)
+                # 🎨 RENK DÜZELTME (PAS HASTALIĞI İÇİN KRİTİK)
+                # Model OpenCV (BGR) ile eğitildiği için RGB'yi ters çeviriyoruz.
+                # Bu olmazsa Turuncu pas lekesi -> Mavi leke gibi görünür ve Leke sanılır.
                 # -------------------------------------------------------------
                 img_array = img_array[..., ::-1] 
-                
-                # 3. VERİ HAZIRLIĞI (0-255 Ham Veri, Bölme YOK)
+
+                # NORMALİZASYON YOK (0-255 Ham Veri)
                 input_data = np.expand_dims(img_array, axis=0)
                 
                 # TAHMİN
@@ -128,6 +142,7 @@ if yuklenen_dosya:
                         
                         st.info(f"**Güven Oranı:** %{guven:.2f}")
                         
+                        # Session Kaydı
                         st.session_state['son_teshis'] = sonuc_ismi
                         st.session_state['son_bitki'] = secilen_bitki
                     else:
@@ -154,3 +169,5 @@ if 'son_teshis' in st.session_state and chatbot_aktif:
                     st.write(cevap.text)
                 except Exception as e:
                     st.error(f"Hata: {e}")
+elif 'son_teshis' in st.session_state and not chatbot_aktif:
+     st.warning("Chatbot bağlantısı kurulamadı, lütfen API anahtarınızı kontrol edin.")
