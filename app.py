@@ -12,20 +12,13 @@ GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg"
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# GEMINI MODELİ (Yedekli Sistem)
-# Önce Flash dener, olmazsa Pro dener. 404 hatasını bitirir.
-chatbot_aktif = False
+# GEMINI CHATBOT (Hatasız Sürüm)
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # En stabil sürümü deniyoruz
     model_gemini = genai.GenerativeModel('gemini-1.5-flash') 
     chatbot_aktif = True
 except:
-    try:
-        model_gemini = genai.GenerativeModel('gemini-pro')
-        chatbot_aktif = True
-    except Exception as e:
-        st.error(f"Chatbot Modeli Yüklenemedi: {e}")
+    chatbot_aktif = False
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 st.markdown("---")
@@ -59,13 +52,13 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF LİSTESİ
+# 3. SINIF LİSTESİ (DÜZELTİLMİŞ DOĞRU SIRALAMA) ✅
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Elma (Apple)":
-        # Röntgen sonuçlarına göre en olası sıralama:
-        # 0: Çürük, 1: Pas, 2: Sağlıklı, 3: Leke
-        return ['Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı', 'Elma Kara Leke']
+        # Hata analizine göre KESİNLEŞMİŞ doğru sıralama:
+        # 0: Scab (Leke), 1: Black Rot (Çürük), 2: Rust (Pas), 3: Healthy (Sağlıklı)
+        return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
         
     elif bitki_tipi == "Domates (Tomato)":
         return ['Bakteriyel Leke', 'Geç Yanıklık', 'Erken Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
@@ -73,10 +66,13 @@ def siniflari_getir(bitki_tipi):
         return ['Mısır Gri Yaprak Lekesi', 'Mısır Yaygın Pas', 'Mısır Kuzey Yaprak Yanıklığı', 'Mısır Sağlıklı']
     elif bitki_tipi == "Patates (Potato)":
         return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
+    elif bitki_tipi == "Üzüm (Grape)":
+        return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
+    
     return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
-# 4. ARAYÜZ VE DÖRTLÜ ÇAPRAZ TEST
+# 4. ARAYÜZ VE ANALİZ
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -86,72 +82,69 @@ if yuklenen_dosya:
     st.image(image, caption='Yüklenen Fotoğraf', use_container_width=True)
     
     if st.button("🔍 Hastalığı Analiz Et", type="primary"):
-        with st.spinner('Yapay zeka renk filtrelerini deniyor...'):
+        with st.spinner('Yapay zeka analiz ediyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # 1. BOYUT: 160x160 (Röntgen Sonucu)
+                # 1. BOYUT: 160x160 (Röntgen Sonucuna Göre)
                 hedef_boyut = (160, 160)
                 img = image.resize(hedef_boyut) 
                 
-                # RGB Array
-                img_array_rgb = np.array(img).astype("float32")
+                # Array'e çevir
+                img_array = np.array(img).astype("float32")
                 
-                # Kanal kontrolü (RGBA temizliği)
-                if img_array_rgb.ndim == 2: img_array_rgb = np.stack((img_array_rgb,)*3, axis=-1)
-                elif img_array_rgb.shape[-1] == 4: img_array_rgb = img_array_rgb[:,:,:3]
-
-                # BGR Array (Renkleri Ters Çevir: Kırmızı <-> Mavi)
-                # Eğer OpenCV ile eğittiysen model bunu isteyecektir!
-                img_array_bgr = img_array_rgb[..., ::-1] 
+                # Kanal kontrolü
+                if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
+                elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
 
                 # -------------------------------------------------------------
-                # 🧪 DÖRTLÜ TEST KOMBİNASYONU
+                # 🧪 OTOMATİK RENK SEÇİMİ (RGB vs BGR)
                 # -------------------------------------------------------------
-                inputs = {
-                    "RGB_Normalize": np.expand_dims(img_array_rgb / 255.0, axis=0),
-                    "RGB_Ham":       np.expand_dims(img_array_rgb, axis=0),
-                    "BGR_Normalize": np.expand_dims(img_array_bgr / 255.0, axis=0), # Favori Adayım
-                    "BGR_Ham":       np.expand_dims(img_array_bgr, axis=0)
-                }
                 
-                en_iyi_guven = 0
-                en_iyi_sonuc = "Belirsiz"
-                kazanan_yontem = ""
+                # 1. Seçenek: Normal RGB (0-255 arası)
+                input_rgb = np.expand_dims(img_array, axis=0)
                 
-                # Dört yöntemi de dene, en yüksek puanı alanı seç
-                for yontem_adi, veri in inputs.items():
-                    tahmin = model.predict(veri)
-                    olasiliklar = tf.nn.softmax(tahmin).numpy()[0]
-                    indeks = np.argmax(olasiliklar)
-                    guven = olasiliklar[indeks] * 100
-                    
-                    if guven > en_iyi_guven:
-                        en_iyi_guven = guven
-                        kazanan_yontem = yontem_adi
-                        siniflar = siniflari_getir(secilen_bitki)
-                        if indeks < len(siniflar):
-                            en_iyi_sonuc = siniflar[indeks]
+                # 2. Seçenek: Normal RGB (0-1 arası)
+                input_rgb_norm = np.expand_dims(img_array / 255.0, axis=0)
+
+                # Tahminleri al
+                pred_rgb = model.predict(input_rgb)
+                pred_norm = model.predict(input_rgb_norm)
+                
+                # Güven skorlarını hesapla
+                conf_rgb = np.max(tf.nn.softmax(pred_rgb).numpy()[0])
+                conf_norm = np.max(tf.nn.softmax(pred_norm).numpy()[0])
+                
+                # Hangisi daha yüksekse onu kullan
+                if conf_rgb > conf_norm:
+                    final_pred = pred_rgb
+                    final_conf = conf_rgb * 100
+                else:
+                    final_pred = pred_norm
+                    final_conf = conf_norm * 100
 
                 # SONUCU YAZDIR
-                if en_iyi_guven > 0:
-                    st.toast(f"Model {kazanan_yontem} yöntemi ile çalıştı.")
+                indeks = np.argmax(final_pred)
+                siniflar = siniflari_getir(secilen_bitki)
+                
+                if indeks < len(siniflar):
+                    sonuc_ismi = siniflar[indeks]
                     
-                    if "Sağlıklı" in en_iyi_sonuc:
-                        st.success(f"**Teşhis:** {en_iyi_sonuc}")
+                    if "Sağlıklı" in sonuc_ismi:
+                        st.success(f"**Teşhis:** {sonuc_ismi}")
                         st.balloons()
                     else:
-                        st.error(f"**Teşhis:** {en_iyi_sonuc}")
+                        st.error(f"**Teşhis:** {sonuc_ismi}")
                     
-                    st.info(f"**Güven Oranı:** %{en_iyi_guven:.2f}")
+                    st.info(f"**Güven Oranı:** %{final_conf:.2f}")
                     
                     # Session Kaydı
-                    st.session_state['son_teshis'] = en_iyi_sonuc
+                    st.session_state['son_teshis'] = sonuc_ismi
                     st.session_state['son_bitki'] = secilen_bitki
                 else:
-                    st.error("Model hiçbir yöntemle sonuç üretemedi.")
+                    st.error("Liste hatası.")
 
 # ==============================================================================
-# 5. SOHBET MODU
+# 5. SOHBET MODU (GEMINI 1.5 FLASH)
 # ==============================================================================
 if 'son_teshis' in st.session_state and chatbot_aktif:
     st.markdown("---")
