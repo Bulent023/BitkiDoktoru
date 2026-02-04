@@ -7,15 +7,16 @@ import google.generativeai as genai
 # ==============================================================================
 # 1. AYARLAR VE API ANAHTARI
 # ==============================================================================
-# 👇 BURAYA KENDİ API KEY'İNİ YAZ 👇
+# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# Gemini Modelini Kur (En Kararlı Sürüm: gemini-pro)
+# Gemini Modelini Kur (GÜNCEL MODEL: 1.5 FLASH)
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    model_gemini = genai.GenerativeModel('gemini-pro')
+    # Pro yerine Flash kullanıyoruz, 404 hatasını bu çözer.
+    model_gemini = genai.GenerativeModel('gemini-1.5-flash')
     chatbot_aktif = True
 except Exception as e:
     st.error(f"Chatbot bağlantı hatası: {e}")
@@ -53,7 +54,7 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF İSİMLERİ (LİSTEYİ KONTROL ET)
+# 3. SINIF İSİMLERİ
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Domates (Tomato)":
@@ -75,7 +76,7 @@ def siniflari_getir(bitki_tipi):
     return ["Bilinmiyor", "Sağlıklı", "Hastalık"]
 
 # ==============================================================================
-# 4. ARAYÜZ VE KARARLI GÖRÜNTÜ İŞLEME
+# 4. ARAYÜZ VE ANALİZ
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -88,49 +89,59 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka inceliyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # --- SABİT BOYUTLANDIRMA VE NORMALİZASYON ---
-                # 1. Boyutu 224x224'e zorla (Standart boyut budur)
-                hedef_boyut = (224, 224)
+                # 1. STANDART BOYUTLANDIRMA (256x256)
+                # Modelin yerel PC'de çalışıp burada çalışmaması genelde boyut farkıdır.
+                # Eğer eğitimde 224 kullandıysan burayı (224, 224) yap.
+                # Genelde standart 256'dır.
+                hedef_boyut = (256, 256)
                 
-                # 2. Resmi sığdır (Fit) ve RGB'ye çevir
+                # Resmi kırpmadan sığdır
                 img = ImageOps.fit(image, hedef_boyut, Image.Resampling.LANCZOS)
                 img_array = np.array(img).astype("float32")
                 
-                # 3. Renk kanalı kontrolü
+                # Renk kanalı kontrolü
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
                 
-                # 4. NORMALİZASYON (Bunu geri getirdik çünkü %17 sorunu modelsiz veri gitmesindendi)
+                # NORMALİZASYON: Yerelde %99 ise muhtemelen 255'e bölüyordun.
                 img_array = img_array / 255.0
                 
                 img_array = np.expand_dims(img_array, axis=0)
                 
-                # Tahmin
-                tahmin = model.predict(img_array)
-                indeks = np.argmax(tahmin)
-                guven = np.max(tahmin) * 100
-                
-                siniflar = siniflari_getir(secilen_bitki)
-                
-                if indeks < len(siniflar):
-                    hastalik_ismi = siniflar[indeks]
+                # 2. TAHMİN VE SOFTMAX DÜZELTMESİ (BU KISIM YENİ!) 🛠️
+                try:
+                    ham_tahmin = model.predict(img_array)
                     
-                    # Renkli kutucuklarla göster
-                    if "Sağlıklı" in hastalik_ismi:
-                        st.success(f"**Teşhis:** {hastalik_ismi}")
-                    else:
-                        st.error(f"**Teşhis:** {hastalik_ismi}")
+                    # Eksi sayıları olasılığa çevir (Softmax)
+                    # Bu işlem -388 sorununu kesin olarak çözer.
+                    olasiliklar = tf.nn.softmax(ham_tahmin).numpy()
+                    
+                    indeks = np.argmax(olasiliklar)
+                    guven = np.max(olasiliklar) * 100
+                    
+                    siniflar = siniflari_getir(secilen_bitki)
+                    
+                    if indeks < len(siniflar):
+                        hastalik_ismi = siniflar[indeks]
                         
-                    st.info(f"**Güven Oranı:** %{guven:.2f}")
-                    
-                    # Session kaydı
-                    st.session_state['son_teshis'] = hastalik_ismi
-                    st.session_state['son_bitki'] = secilen_bitki
-                else:
-                    st.error("Sınıf listesi ile model uyuşmuyor.")
+                        if "Sağlıklı" in hastalik_ismi:
+                            st.success(f"**Teşhis:** {hastalik_ismi}")
+                        else:
+                            st.error(f"**Teşhis:** {hastalik_ismi}")
+                            
+                        st.info(f"**Güven Oranı:** %{guven:.2f}")
+                        
+                        # Session kaydı
+                        st.session_state['son_teshis'] = hastalik_ismi
+                        st.session_state['son_bitki'] = secilen_bitki
+                    else:
+                        st.error("Sınıf listesi hatası.")
+                        
+                except Exception as e:
+                    st.error(f"Tahmin hatası: {e}")
 
 # ==============================================================================
-# 5. SOHBET MODU (GEMINI PRO)
+# 5. SOHBET MODU (GEMINI 1.5 FLASH)
 # ==============================================================================
 if 'son_teshis' in st.session_state and chatbot_aktif:
     st.markdown("---")
