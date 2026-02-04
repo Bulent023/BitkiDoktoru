@@ -1,24 +1,22 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 import google.generativeai as genai
 
 # ==============================================================================
-# 1. AYARLAR VE API ANAHTARI
+# 1. AYARLAR VE API KEY
 # ==============================================================================
-# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# Gemini Modelini Kur (Gemini Pro - En Kararlı Sürüm)
+# Gemini Pro (Chatbot)
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
     model_gemini = genai.GenerativeModel('gemini-pro')
     chatbot_aktif = True
-except Exception as e:
-    st.error(f"Chatbot bağlantı hatası: {e}")
+except:
     chatbot_aktif = False
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
@@ -53,12 +51,11 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF İSİMLERİ (DOĞRULANMIŞ LİSTE) 🕵️‍♂️✅
+# 3. SINIF LİSTESİ (Dedektif Modunda Doğruladığımız Sıralama)
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
-    
-    # ELMA İÇİN KESİNLEŞMİŞ SIRALAMA (0: Leke, 1: Çürük, 2: Pas, 3: Sağlıklı)
     if bitki_tipi == "Elma (Apple)":
+        # 0: Leke, 1: Çürük, 2: Pas, 3: Sağlıklı
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
         
     elif bitki_tipi == "Domates (Tomato)":
@@ -76,7 +73,7 @@ def siniflari_getir(bitki_tipi):
     elif bitki_tipi == "Çilek (Strawberry)":
         return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
         
-    return ["Bilinmiyor", "Sağlıklı", "Hastalık"]
+    return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
 # 4. ARAYÜZ VE ANALİZ
@@ -92,11 +89,10 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka inceliyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # 1. BOYUTLANDIRMA (RESIZE - Sündürme Yöntemi)
-                # Kırpma yapmıyoruz, tüm yaprağı görsün diye resize kullanıyoruz.
+                # 1. BOYUTLANDIRMA (Dedektif modu ile aynı - RESIZE)
                 hedef_boyut = (224, 224)
                 
-                # Modelin içine bakıp boyutu teyit etmeye çalışalım
+                # Model shape kontrolü
                 try:
                     if model.input_shape and model.input_shape[1]:
                         hedef_boyut = (model.input_shape[1], model.input_shape[2])
@@ -106,46 +102,59 @@ if yuklenen_dosya:
                 img = image.resize(hedef_boyut)
                 img_array = np.array(img).astype("float32")
                 
-                # 2. RENK VE KANAL AYARI
+                # Kanal kontrolü
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
                 
-                # 3. NORMALİZASYON (255'e bölme)
-                # Dedektif modunda %69 bununla çıktı, o yüzden bunu koruyoruz.
+                # 2. NORMALİZASYON (/255.0)
                 img_array = img_array / 255.0
-                
                 img_array = np.expand_dims(img_array, axis=0)
                 
-                # 4. TAHMİN
+                # 3. TAHMİN
                 try:
                     ham_tahmin = model.predict(img_array)
-                    
-                    # Softmax ile sayıları garanti düzelt
                     olasiliklar = tf.nn.softmax(ham_tahmin).numpy()[0]
                     
-                    indeks = np.argmax(olasiliklar)
-                    guven = olasiliklar[indeks] * 100
+                    # En yüksek puanı alan sınıfı bul
+                    en_yuksek_indeks = np.argmax(olasiliklar)
+                    guven = olasiliklar[en_yuksek_indeks] * 100
                     
                     siniflar = siniflari_getir(secilen_bitki)
+                    tahmin_edilen_isim = siniflar[en_yuksek_indeks]
+
+                    # --- [GÜVENLİK MEKANİZMASI BAŞLANGICI] ---
+                    # Eğer model "Sağlıklı" dediyse AMA güven oranı %80'den düşükse:
+                    # Bu demektir ki model aslında şüpheli bir şey gördü ama tam emin olamadı.
+                    # Biz riske atmayıp ikinci en yüksek ihtimale (hastalığa) bakacağız.
                     
-                    if indeks < len(siniflar):
-                        hastalik_ismi = siniflar[indeks]
+                    if "Sağlıklı" in tahmin_edilen_isim and guven < 80:
+                        # Sağlıklı ihtimalini sıfırla ve tekrar en yükseği bul
+                        olasiliklar[en_yuksek_indeks] = 0 
+                        yeni_indeks = np.argmax(olasiliklar)
+                        yeni_guven = olasiliklar[yeni_indeks] * 100
                         
-                        if "Sağlıklı" in hastalik_ismi:
-                            st.success(f"**Teşhis:** {hastalik_ismi}")
-                        else:
-                            st.error(f"**Teşhis:** {hastalik_ismi}")
-                            
-                        st.info(f"**Güven Oranı:** %{guven:.2f}")
-                        
-                        # Session kaydı
-                        st.session_state['son_teshis'] = hastalik_ismi
-                        st.session_state['son_bitki'] = secilen_bitki
+                        # Yeni tahmin bir hastalık mı?
+                        yeni_isim = siniflar[yeni_indeks]
+                        if "Sağlıklı" not in yeni_isim:
+                            tahmin_edilen_isim = yeni_isim
+                            guven = yeni_guven
+                            st.warning("⚠️ Model ilk başta 'Sağlıklı' sandı ama yaprakta şüpheli lekeler tespit edildi.")
+                    # --- [GÜVENLİK MEKANİZMASI BİTİŞİ] ---
+
+                    # SONUCU YAZDIR
+                    if "Sağlıklı" in tahmin_edilen_isim:
+                        st.success(f"**Teşhis:** {tahmin_edilen_isim}")
+                        st.balloons()
                     else:
-                        st.error("Sınıf listesi hatası.")
+                        st.error(f"**Teşhis:** {tahmin_edilen_isim}")
                         
+                    st.info(f"**Güven Oranı:** %{guven:.2f}")
+                    
+                    st.session_state['son_teshis'] = tahmin_edilen_isim
+                    st.session_state['son_bitki'] = secilen_bitki
+
                 except Exception as e:
-                    st.error(f"Tahmin hatası: {e}")
+                    st.error(f"Hata: {e}")
 
 # ==============================================================================
 # 5. SOHBET MODU (GEMINI PRO)
