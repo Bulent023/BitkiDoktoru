@@ -8,7 +8,7 @@ import google.generativeai as genai
 # 1. AYARLAR VE API ANAHTARI
 # ==============================================================================
 # 👇 SENİN VERDİĞİN API KEY'İ BURAYA YERLEŞTİRDİM 👇
-GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg"
+GOOGLE_API_KEY = "AIzaSyAnViuUVRz8H6Vj0kNU7-DPOskQMUEjrIA"
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
