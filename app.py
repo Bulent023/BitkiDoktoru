@@ -5,32 +5,62 @@ from PIL import Image
 import google.generativeai as genai
 
 # ==============================================================================
-# 1. AYARLAR VE API ANAHTARI (BURAYI DOLDUR!)
+# 1. AYARLAR VE API ANAHTARI
 # ==============================================================================
-# Buraya kendi Gemini API Key'ini tırnak içine yazmalısın.
-# Eğer Streamlit Secrets kullanıyorsan oradan da çekebilirsin.
+# BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ!
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
-# Sayfa Ayarları
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# Gemini Modelini Kur
-try:
-    genai.configure(api_key=GOOGLE_API_KEY)
-    model_gemini = genai.GenerativeModel('gemini-pro')
-    chatbot_aktif = True
-except:
-    chatbot_aktif = False
+# --- YENİ: OTOMATİK MODEL SEÇİCİ ---
+# Bu fonksiyon hesabındaki modelleri tarar ve çalışan bir tanesini seçer.
+def gemini_modelini_baslat():
+    if not GOOGLE_API_KEY or "BURAYA" in GOOGLE_API_KEY:
+        return None, False
+
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        
+        # 1. Hesaptaki tüm uygun modelleri listele
+        uygun_modeller = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                uygun_modeller.append(m.name)
+        
+        # 2. Öncelik sırasına göre seçim yap
+        secilen_model_adi = ""
+        oncelikler = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro']
+        
+        # Önce favori modellerimizi kontrol et
+        for oncelik in oncelikler:
+            if oncelik in uygun_modeller:
+                secilen_model_adi = oncelik
+                break
+        
+        # Eğer favoriler yoksa, listedeki ilk uygun modeli al
+        if not secilen_model_adi and uygun_modeller:
+            secilen_model_adi = uygun_modeller[0]
+            
+        if secilen_model_adi:
+            # Modeli başlat
+            return genai.GenerativeModel(secilen_model_adi), True
+        else:
+            return None, False
+            
+    except Exception as e:
+        return None, False
+
+# Modeli kurmaya çalış
+model_gemini, chatbot_aktif = gemini_modelini_baslat()
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 st.markdown("---")
 
 # ==============================================================================
-# 2. MODEL YÜKLEME VE OPTİMİZASYON (RAM DOSTU)
+# 2. HASTALIK MODELİ YÜKLEME (RAM DOSTU)
 # ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
-    # Dosya eşleştirmeleri
     mapper = {
         "Elma (Apple)": "apple_uzman_model.keras",
         "Domates (Tomato)": "tomato_uzman_model.keras",
@@ -47,7 +77,6 @@ def model_yukle(bitki_tipi):
         "Kabak": "squash_uzman_model.keras",
         "Portakal": "orange_uzman_model.keras"
     }
-
     if bitki_tipi in mapper:
         try:
             return tf.keras.models.load_model(mapper[bitki_tipi])
@@ -56,45 +85,32 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF İSİMLERİ (BU SIRALAMA ÇOK ÖNEMLİ!)
+# 3. SINIF İSİMLERİ (DÜZELTİLMİŞ LİSTE)
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
-    # DOMATES İÇİN STANDART SIRALAMA (Alfabetik: Bacterial, Early, Late, Leaf Mold...)
-    # Eğer sonucun yanlış çıkıyorsa buradaki sırayı eğitim klasörlerine göre değiştir.
+    # Domates sıralaması (Alfabetik)
     if bitki_tipi == "Domates (Tomato)":
-        return [
-            'Bakteriyel Leke',           # 0
-            'Erken Yanıklık',            # 1
-            'Geç Yanıklık',              # 2
-            'Yaprak Küfü',               # 3
-            'Septoria Yaprak Lekesi',    # 4
-            'Örümcek Akarları',          # 5
-            'Hedef Leke',                # 6
-            'Sarı Yaprak Kıvırcıklığı',  # 7
-            'Mozaik Virüsü',             # 8
-            'Sağlıklı'                   # 9
-        ]
-    
+        return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
     elif bitki_tipi == "Elma (Apple)":
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
-
     elif bitki_tipi == "Mısır (Corn)":
         return ['Mısır Gri Yaprak Lekesi', 'Mısır Yaygın Pas', 'Mısır Kuzey Yaprak Yanıklığı', 'Mısır Sağlıklı']
-    
     elif bitki_tipi == "Patates (Potato)":
         return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
-        
-    # Diğerleri için varsayılan (Hata almamak için)
+    elif bitki_tipi == "Üzüm (Grape)":
+        return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
+    elif bitki_tipi == "Biber (Pepper)":
+        return ['Biber Bakteriyel Leke', 'Biber Sağlıklı']
+    elif bitki_tipi == "Şeftali (Peach)":
+        return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
+    elif bitki_tipi == "Çilek (Strawberry)":
+        return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
     return ["Hastalık Tespit Edildi", "Sağlıklı", "Bilinmiyor"]
 
 # ==============================================================================
-# 4. ARAYÜZ VE İŞLEMLER
+# 4. ARAYÜZ
 # ==============================================================================
-secilen_bitki = st.selectbox(
-    "🌿 Hangi bitkiyi analiz edelim?",
-    ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"]
-)
-
+secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
 
 if yuklenen_dosya:
@@ -103,11 +119,9 @@ if yuklenen_dosya:
     
     if st.button("🔍 Hastalığı Analiz Et", type="primary"):
         with st.spinner('Yapay zeka inceliyor...'):
-            # 1. Modeli Yükle
             model = model_yukle(secilen_bitki)
-            
             if model:
-                # 2. Resmi Hazırla (Akıllı Boyutlandırma)
+                # Akıllı Boyutlandırma
                 try:
                     shape = model.input_shape
                     boyut = (shape[1], shape[2]) if shape and shape[1] else (256, 256)
@@ -116,50 +130,23 @@ if yuklenen_dosya:
                 
                 img = image.resize(boyut)
                 img_array = np.array(img).astype("float32") / 255.0
-                
-                # Boyut düzeltme
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
                 img_array = np.expand_dims(img_array, axis=0)
                 
-                # 3. Tahmin
                 tahmin = model.predict(img_array)
                 indeks = np.argmax(tahmin)
                 guven = np.max(tahmin) * 100
-                
                 siniflar = siniflari_getir(secilen_bitki)
                 
                 if indeks < len(siniflar):
                     hastalik_ismi = siniflar[indeks]
                     st.success(f"**Teşhis:** {hastalik_ismi}")
                     st.info(f"**Eminlik:** %{guven:.2f}")
-                    
-                    # Sonucu Session State'e kaydet (Sohbet için lazım)
                     st.session_state['son_teshis'] = hastalik_ismi
                     st.session_state['son_bitki'] = secilen_bitki
                 else:
                     st.error("Hata: Sınıf listesi uyumsuz.")
 
 # ==============================================================================
-# 5. YAPAY ZEKA SOHBET MODU (YENİ EKLENEN KISIM)
-# ==============================================================================
-if 'son_teshis' in st.session_state and chatbot_aktif:
-    st.markdown("---")
-    st.subheader(f"🤖 Ziraat Asistanı ile Konuşun")
-    st.write(f"**Teşhis edilen durum:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
-    st.write("Bu hastalıkla ilgili tedavi yöntemlerini, ilaçları veya kültürel önlemleri sorabilirsiniz.")
-
-    soru = st.text_input("Sorunuzu buraya yazın (Örn: Bu hastalık için hangi ilacı kullanmalıyım?)")
-    
-    if st.button("Soruyu Gönder"):
-        if soru:
-            with st.spinner('Asistan cevaplıyor...'):
-                prompt = f"Sen uzman bir ziraat mühendisisin. Kullanıcının bitkisinde şu hastalık tespit edildi: {st.session_state['son_bitki']} bitkisinde {st.session_state['son_teshis']}. Kullanıcının sorusu şu: '{soru}'. Buna göre bilimsel, pratik ve çözüm odaklı kısa bir cevap ver."
-                try:
-                    cevap = model_gemini.generate_content(prompt)
-                    st.markdown(f"**Cevap:** {cevap.text}")
-                except Exception as e:
-                    st.error(f"Hata oluştu: {e}. Lütfen API anahtarınızı kontrol edin.")
-    
-elif not chatbot_aktif:
-    st.warning("⚠️ Sohbet özelliğini kullanmak için kodun en başına geçerli bir 'GOOGLE_API_KEY' eklemelisiniz.")
+# 5. SOH
