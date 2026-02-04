@@ -5,32 +5,26 @@ from PIL import Image, ImageOps
 import google.generativeai as genai
 
 # ==============================================================================
-# 1. API ANAHTARI
+# 1. AYARLAR
 # ==============================================================================
-# 👇 BURAYA KENDİ API KEY'İNİ YAZMAYI UNUTMA! 👇
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# ==============================================================================
-# 2. GEMINI CHATBOT (404 HATASI ÇÖZÜMÜ)
-# ==============================================================================
+# Gemini Pro (Güvenli Liman)
 chatbot_aktif = False
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Flash çalışmadığı için doğrudan PRO modeline geçiyoruz.
     model_gemini = genai.GenerativeModel('gemini-pro')
     chatbot_aktif = True
-except Exception as e:
-    # Hata olsa bile uygulama çökmesin, sadece chatbot kapansın.
-    print(f"Chatbot hatası: {e}")
-    chatbot_aktif = False
+except:
+    pass
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 st.markdown("---")
 
 # ==============================================================================
-# 3. MODEL YÜKLEME
+# 2. MODEL YÜKLEME
 # ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
@@ -58,13 +52,15 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 4. SINIF LİSTESİ (KALİBRASYON İLE DOĞRULANMIŞ LİSTE) ✅
+# 3. SINIF LİSTESİ (KALİBRASYONLU)
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Elma (Apple)":
-        # TEST SONUCU: Sınıf 2 = Pas çıktı. Buna göre sıralama:
+        # Önceki testte: Sınıf 2 = Pas çıkmıştı.
+        # Sıralama: 0: Leke, 1: Çürük, 2: Pas, 3: Sağlıklı
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
-        
+    
+    # Diğer bitkiler için standart listeler...
     elif bitki_tipi == "Domates (Tomato)":
         return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
     elif bitki_tipi == "Mısır (Corn)":
@@ -73,11 +69,11 @@ def siniflari_getir(bitki_tipi):
         return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
     elif bitki_tipi == "Üzüm (Grape)":
         return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
-    
+        
     return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
-# 5. ARAYÜZ VE ANALİZ
+# 4. ARAYÜZ VE ANALİZ
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -90,22 +86,25 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka analiz ediyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # -----------------------------------------------------------
-                # 🛠️ FİNAL DÜZELTMELER (Kalibrasyon Sonucu)
-                # 1. Boyut: 160x160 (Modelin istediği)
-                # 2. Normalizasyon: YOK! (0-255 Ham Veri Kullanılacak)
-                # -----------------------------------------------------------
+                # 1. BOYUT: 160x160 (Kesin Bilgi)
                 hedef_boyut = (160, 160)
                 img = image.resize(hedef_boyut) 
                 
-                # Array'e çevir (HAM HALİYLE, BÖLME YOK)
+                # 2. ARRAY'E ÇEVİR
                 img_array = np.array(img).astype("float32")
                 
-                # Kanal kontrolü
+                # Kanal temizliği (Alpha kanalını at)
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
 
-                # Modele verilecek giriş
+                # -------------------------------------------------------------
+                # 🚨 KRİTİK HAMLE: RGB -> BGR DÖNÜŞÜMÜ
+                # OpenCV ile eğitilen modeller BGR ister. PIL ise RGB verir.
+                # Bu satır renkleri ters çevirir (Kırmızı <-> Mavi)
+                # -------------------------------------------------------------
+                img_array = img_array[..., ::-1] 
+                
+                # 3. VERİ HAZIRLIĞI (0-255 Ham Veri, Bölme YOK)
                 input_data = np.expand_dims(img_array, axis=0)
                 
                 # TAHMİN
@@ -129,7 +128,6 @@ if yuklenen_dosya:
                         
                         st.info(f"**Güven Oranı:** %{guven:.2f}")
                         
-                        # Session Kaydı
                         st.session_state['son_teshis'] = sonuc_ismi
                         st.session_state['son_bitki'] = secilen_bitki
                     else:
@@ -138,7 +136,7 @@ if yuklenen_dosya:
                     st.error(f"Tahmin hatası: {e}")
 
 # ==============================================================================
-# 6. SOHBET MODU
+# 5. SOHBET MODU
 # ==============================================================================
 if 'son_teshis' in st.session_state and chatbot_aktif:
     st.markdown("---")
@@ -156,5 +154,3 @@ if 'son_teshis' in st.session_state and chatbot_aktif:
                     st.write(cevap.text)
                 except Exception as e:
                     st.error(f"Hata: {e}")
-elif 'son_teshis' in st.session_state and not chatbot_aktif:
-    st.warning("Chatbot şu an aktif değil (API Key veya Model sorunu), ancak teşhis doğru çalışıyor.")
