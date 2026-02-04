@@ -7,8 +7,8 @@ import google.generativeai as genai
 # ==============================================================================
 # 1. AYARLAR VE API ANAHTARI
 # ==============================================================================
-# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
-GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
+# 👇 SENİN VERDİĞİN API KEY'İ BURAYA YERLEŞTİRDİM 👇
+GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg"
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
@@ -20,16 +20,16 @@ try:
     # Önce en yeni ve hızlı modeli deneyelim
     model_gemini = genai.GenerativeModel('gemini-1.5-flash')
     # Test edelim
-    model_gemini.generate_content("test")
+    response = model_gemini.generate_content("test")
     chatbot_aktif = True
 except:
     try:
-        # Olmazsa bir öncekini deneyelim
+        # Olmazsa bir öncekini deneyelim (Yedek)
         model_gemini = genai.GenerativeModel('gemini-1.0-pro')
-        model_gemini.generate_content("test")
+        response = model_gemini.generate_content("test")
         chatbot_aktif = True
     except Exception as e:
-        st.warning(f"⚠️ Chatbot şu an çalışmıyor (API Hatası). Teşhis sistemi devrede.")
+        # Eğer yine hata verirse ekrana basma, sadece chat'i kapat.
         chatbot_aktif = False
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
@@ -69,9 +69,9 @@ def model_yukle(bitki_tipi):
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Elma (Apple)":
         # Yaptığımız testlere göre en tutarlı sıralama:
-        # 0: Kara Leke (Daha önceki testinde 0 çıkmıştı)
+        # 0: Kara Leke 
         # 1: Kara Çürüklük
-        # 2: Pas (Son testinde 2 çıkmıştı)
+        # 2: Pas (Turuncu olan)
         # 3: Sağlıklı
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
         
@@ -170,4 +170,4 @@ if 'son_teshis' in st.session_state and chatbot_aktif:
                 except Exception as e:
                     st.error(f"Hata: {e}")
 elif 'son_teshis' in st.session_state and not chatbot_aktif:
-     st.warning("Chatbot bağlantısı kurulamadı, lütfen API anahtarınızı kontrol edin.")
+     st.warning("Chatbot şu an yanıt veremiyor (API anahtarı veya kota sorunu olabilir).")
