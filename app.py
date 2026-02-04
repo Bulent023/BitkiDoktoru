@@ -1,24 +1,24 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import google.generativeai as genai
 
 # ==============================================================================
 # 1. AYARLAR VE API ANAHTARI
 # ==============================================================================
-# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
+# 👇 BURAYA KENDİ API KEY'İNİ YAZ 👇
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# Gemini Modelini Kur
+# Gemini Modelini Kur (En Kararlı Sürüm: gemini-pro)
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    model_gemini = genai.GenerativeModel('gemini-1.5-flash')
+    model_gemini = genai.GenerativeModel('gemini-pro')
     chatbot_aktif = True
 except Exception as e:
-    st.error(f"Chatbot hatası: {e}")
+    st.error(f"Chatbot bağlantı hatası: {e}")
     chatbot_aktif = False
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
@@ -53,10 +53,9 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF İSİMLERİ
+# 3. SINIF İSİMLERİ (LİSTEYİ KONTROL ET)
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
-    # DOMATES İÇİN SIRALAMAYI KONTROL ET
     if bitki_tipi == "Domates (Tomato)":
         return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
     elif bitki_tipi == "Elma (Apple)":
@@ -73,10 +72,10 @@ def siniflari_getir(bitki_tipi):
         return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
     elif bitki_tipi == "Çilek (Strawberry)":
         return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
-    return ["Hastalık Tespit Edildi", "Sağlıklı", "Bilinmiyor"]
+    return ["Bilinmiyor", "Sağlıklı", "Hastalık"]
 
 # ==============================================================================
-# 4. ARAYÜZ VE ANALİZ
+# 4. ARAYÜZ VE KARARLI GÖRÜNTÜ İŞLEME
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -89,72 +88,63 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka inceliyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # 1. BOYUTLANDIRMA
-                # Hata almamak için 224x224 standart yapıyoruz (Çoğu model için güvenlidir)
-                # Eğer senin modelin 256 ise burayı (256, 256) yap.
-                try:
-                    shape = model.input_shape
-                    boyut = (shape[1], shape[2]) if shape and shape[1] else (224, 224)
-                except:
-                    boyut = (224, 224)
+                # --- SABİT BOYUTLANDIRMA VE NORMALİZASYON ---
+                # 1. Boyutu 224x224'e zorla (Standart boyut budur)
+                hedef_boyut = (224, 224)
                 
-                img = image.resize(boyut)
+                # 2. Resmi sığdır (Fit) ve RGB'ye çevir
+                img = ImageOps.fit(image, hedef_boyut, Image.Resampling.LANCZOS)
                 img_array = np.array(img).astype("float32")
                 
-                # -------------------------------------------------------------
-                # 🚨 KRİTİK DEĞİŞİKLİK BURADA: BÖLME İŞLEMİNİ KALDIRDIK
-                # Eskiden: img_array = img_array / 255.0  (Bu yanlıştı)
-                # Şimdi:   img_array = img_array          (Olduğu gibi bırakıyoruz)
-                # -------------------------------------------------------------
-                
-                # Boyutları düzelt (Batch ve Kanal)
+                # 3. Renk kanalı kontrolü
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
+                
+                # 4. NORMALİZASYON (Bunu geri getirdik çünkü %17 sorunu modelsiz veri gitmesindendi)
+                img_array = img_array / 255.0
+                
                 img_array = np.expand_dims(img_array, axis=0)
                 
-                # 2. TAHMİN
-                try:
-                    tahmin = model.predict(img_array)
-                    indeks = np.argmax(tahmin)
-                    guven = np.max(tahmin) # 100 ile çarpmadan önce ham değeri alalım
+                # Tahmin
+                tahmin = model.predict(img_array)
+                indeks = np.argmax(tahmin)
+                guven = np.max(tahmin) * 100
+                
+                siniflar = siniflari_getir(secilen_bitki)
+                
+                if indeks < len(siniflar):
+                    hastalik_ismi = siniflar[indeks]
                     
-                    # Eğer güven skoru çok düşükse (örn: 0.99 yerine 0.001 çıkıyorsa) bir terslik vardır
-                    # Bazı modeller softmax çıktısı vermez, logits verir.
-                    # Güvenlik için softmax uygulayalım:
-                    if guven > 1.0: # Zaten yüzdeyse veya logits ise
-                         guven_yuzde = guven
-                    else:
-                         guven_yuzde = guven * 100
-
-                    siniflar = siniflari_getir(secilen_bitki)
-                    
-                    if indeks < len(siniflar):
-                        hastalik_ismi = siniflar[indeks]
+                    # Renkli kutucuklarla göster
+                    if "Sağlıklı" in hastalik_ismi:
                         st.success(f"**Teşhis:** {hastalik_ismi}")
-                        st.info(f"**Eminlik:** %{guven_yuzde:.2f}")
-                        st.session_state['son_teshis'] = hastalik_ismi
-                        st.session_state['son_bitki'] = secilen_bitki
                     else:
-                        st.error("Hata: Sınıf listesi uyumsuz.")
-                except ValueError as e:
-                    st.error(f"Hata oluştu: {e}")
+                        st.error(f"**Teşhis:** {hastalik_ismi}")
+                        
+                    st.info(f"**Güven Oranı:** %{guven:.2f}")
+                    
+                    # Session kaydı
+                    st.session_state['son_teshis'] = hastalik_ismi
+                    st.session_state['son_bitki'] = secilen_bitki
+                else:
+                    st.error("Sınıf listesi ile model uyuşmuyor.")
 
 # ==============================================================================
-# 5. SOHBET MODU
+# 5. SOHBET MODU (GEMINI PRO)
 # ==============================================================================
 if 'son_teshis' in st.session_state and chatbot_aktif:
     st.markdown("---")
     st.subheader(f"🤖 Ziraat Asistanı ile Konuşun")
-    st.write(f"**Durum:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
+    st.write(f"**Konu:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
     
-    soru = st.text_input("Sorunuzu buraya yazın (Örn: İlaç önerisi nedir?)")
+    soru = st.text_input("Sorunuzu buraya yazın...")
     
     if st.button("Soruyu Gönder"):
         if soru:
-            with st.spinner('Asistan cevaplıyor...'):
-                prompt = f"Sen uzman bir ziraat mühendisisin. Kullanıcının bitkisinde şu hastalık var: {st.session_state['son_bitki']} bitkisinde {st.session_state['son_teshis']}. Soru: '{soru}'. Kısa ve öz çözüm öner."
+            with st.spinner('Cevap hazırlanıyor...'):
+                prompt = f"Sen bir ziraat mühendisisin. Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}. Soru: {soru}. Kısa ve net cevap ver."
                 try:
                     cevap = model_gemini.generate_content(prompt)
-                    st.markdown(f"**Cevap:** {cevap.text}")
+                    st.write(cevap.text)
                 except Exception as e:
-                    st.error(f"Bir hata oluştu: {e}")
+                    st.error(f"Hata: {e}")
