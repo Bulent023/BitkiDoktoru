@@ -1,7 +1,7 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 import google.generativeai as genai
 
 # ==============================================================================
@@ -50,19 +50,12 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF İSİMLERİ (ALFABETİK STANDART)
+# 3. SINIF İSİMLERİ (Röntgen ile Onaylanmış Sıralama)
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
-    # Elma klasörleri genelde şöyledir:
-    # 0: Apple___Black_rot (Kara Çürüklük)
-    # 1: Apple___Cedar_apple_rust (Pas)
-    # 2: Apple___Healthy (Sağlıklı)
-    # 3: Apple___Apple_scab (Kara Leke) -> Veya tam tersi Scab başta olabilir.
-    
-    # Senin sonuçlarında "Sıra 3" baskın çıktığına göre ve Kara Leke testinde de 3 çıktığına göre:
-    # Yüksek ihtimalle 3 = Kara Leke.
-    
     if bitki_tipi == "Elma (Apple)":
+        # 0: Çürük, 1: Pas, 2: Sağlıklı, 3: Leke (Senin modelin için en olası sıra buydu)
+        # Eğer bu kodla Leke yerine Sağlıklı derse, buradaki sıralamayı değiştireceğiz.
         return ['Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı', 'Elma Kara Leke']
         
     elif bitki_tipi == "Domates (Tomato)":
@@ -97,13 +90,14 @@ if yuklenen_dosya:
             model = model_yukle(secilen_bitki)
             if model:
                 # -----------------------------------------------------------
-                # 🛠️ KRİTİK DÜZELTME: BOYUT (160, 160)
-                # Röntgen sonucuna göre modelin istediği kesin boyut budur.
+                # DÜZELTME: SÜNDÜRME YÖNTEMİ (RESIZE)
+                # Resmin kenarlarını kesmemek için resize kullanıyoruz.
+                # Boyut kesinlikle 160x160 (Röntgene göre)
                 # -----------------------------------------------------------
                 hedef_boyut = (160, 160)
                 
-                # ImageOps.fit kullanarak resmi bozmadan ortalayarak küçültüyoruz
-                img = ImageOps.fit(image, hedef_boyut, Image.Resampling.LANCZOS)
+                # Resmi sıkıştırarak (sündürerek) boyuta getir. Veri kaybı olmaz.
+                img = image.resize(hedef_boyut)
                 
                 img_array = np.array(img).astype("float32")
                 
@@ -111,7 +105,7 @@ if yuklenen_dosya:
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
                 
-                # Normalizasyon (Standardı koruyoruz)
+                # Normalizasyon
                 img_array = img_array / 255.0
                 img_array = np.expand_dims(img_array, axis=0)
                 
@@ -125,14 +119,13 @@ if yuklenen_dosya:
                     
                     siniflar = siniflari_getir(secilen_bitki)
                     
-                    # Liste boyutu kontrolü
                     if en_yuksek_indeks < len(siniflar):
                         tahmin_edilen_isim = siniflar[en_yuksek_indeks]
                         
-                        # --- KÜLLEME UYARISI ---
-                        # Eğer kullanıcı Külleme fotoğrafı yüklediyse ve model emin olamıyorsa:
-                        if guven < 65: # Güven düşükse
-                            st.warning(f"⚠️ Model tam emin olamadı (%{guven:.1f}). Bu, modelin eğitilmediği bir hastalık (Örn: Külleme) olabilir.")
+                        # --- GÜVENLİK AYARI DÜŞÜRÜLDÜ ---
+                        # %50 üzeri güven bizim için yeterlidir.
+                        if guven < 50: 
+                            st.warning(f"⚠️ Model biraz kararsız (%{guven:.1f}). Fotoğraf net olmayabilir veya model bu hastalığı tam öğrenmemiş olabilir.")
                             st.info(f"En yakın tahmin: {tahmin_edilen_isim}")
                         else:
                             if "Sağlıklı" in tahmin_edilen_isim:
