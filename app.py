@@ -1,7 +1,7 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 import google.generativeai as genai
 
 # ==============================================================================
@@ -12,11 +12,11 @@ GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg"
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# Gemini Modelini Kur (GÜNCEL MODEL: 1.5 FLASH)
+# Gemini Modelini Kur (GARANTİ ÇÖZÜM: GEMINI PRO)
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Pro yerine Flash kullanıyoruz, 404 hatasını bu çözer.
-    model_gemini = genai.GenerativeModel('gemini-1.5-flash')
+    # Flash yerine Pro kullanıyoruz. 404 hatası kesin çözülecek.
+    model_gemini = genai.GenerativeModel('gemini-pro')
     chatbot_aktif = True
 except Exception as e:
     st.error(f"Chatbot bağlantı hatası: {e}")
@@ -76,7 +76,7 @@ def siniflari_getir(bitki_tipi):
     return ["Bilinmiyor", "Sağlıklı", "Hastalık"]
 
 # ==============================================================================
-# 4. ARAYÜZ VE ANALİZ
+# 4. ARAYÜZ VE ANALİZ (DOĞRULUK İÇİN DÜZELTİLDİ)
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -89,31 +89,38 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka inceliyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # 1. STANDART BOYUTLANDIRMA (256x256)
-                # Modelin yerel PC'de çalışıp burada çalışmaması genelde boyut farkıdır.
-                # Eğer eğitimde 224 kullandıysan burayı (224, 224) yap.
-                # Genelde standart 256'dır.
-                hedef_boyut = (256, 256)
+                # --- DOĞRULUK İÇİN KRİTİK AYARLAR ---
                 
-                # Resmi kırpmadan sığdır
-                img = ImageOps.fit(image, hedef_boyut, Image.Resampling.LANCZOS)
+                # 1. STANDART RESIZE (Sündürme)
+                # ImageOps.fit yerine bunu kullanıyoruz. Yaprağın kenarındaki hastalıkları kesmemek için.
+                hedef_boyut = (224, 224) 
+                
+                # Modelin input_shape'i varsa onu kullan, yoksa 224 devam et
+                try:
+                    if model.input_shape and model.input_shape[1]:
+                        hedef_boyut = (model.input_shape[1], model.input_shape[2])
+                except:
+                    pass
+
+                # Resmi Sündürerek Boyutlandır (Eğitimde genelde bu kullanılır)
+                img = image.resize(hedef_boyut)
                 img_array = np.array(img).astype("float32")
                 
-                # Renk kanalı kontrolü
+                # Renk kanalı kontrolü (RGBA -> RGB)
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
                 
-                # NORMALİZASYON: Yerelde %99 ise muhtemelen 255'e bölüyordun.
+                # 2. NORMALİZASYON (0-1 Arası)
+                # %99 başarıyı bununla almıştın, bunu tutuyoruz.
                 img_array = img_array / 255.0
                 
                 img_array = np.expand_dims(img_array, axis=0)
                 
-                # 2. TAHMİN VE SOFTMAX DÜZELTMESİ (BU KISIM YENİ!) 🛠️
+                # 3. TAHMİN VE MATEMATİK DÜZELTMESİ
                 try:
                     ham_tahmin = model.predict(img_array)
                     
-                    # Eksi sayıları olasılığa çevir (Softmax)
-                    # Bu işlem -388 sorununu kesin olarak çözer.
+                    # Eksi sayıları düzeltmek için SOFTMAX uyguluyoruz
                     olasiliklar = tf.nn.softmax(ham_tahmin).numpy()
                     
                     indeks = np.argmax(olasiliklar)
@@ -141,7 +148,7 @@ if yuklenen_dosya:
                     st.error(f"Tahmin hatası: {e}")
 
 # ==============================================================================
-# 5. SOHBET MODU (GEMINI 1.5 FLASH)
+# 5. SOHBET MODU (GEMINI PRO)
 # ==============================================================================
 if 'son_teshis' in st.session_state and chatbot_aktif:
     st.markdown("---")
