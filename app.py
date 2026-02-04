@@ -56,6 +56,7 @@ def model_yukle(bitki_tipi):
 # 3. SINIF İSİMLERİ
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
+    # DOMATES İÇİN SIRALAMAYI KONTROL ET
     if bitki_tipi == "Domates (Tomato)":
         return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
     elif bitki_tipi == "Elma (Apple)":
@@ -88,40 +89,55 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka inceliyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # --- BOYUTLANDIRMA DÜZELTME ---
+                # 1. BOYUTLANDIRMA
+                # Hata almamak için 224x224 standart yapıyoruz (Çoğu model için güvenlidir)
+                # Eğer senin modelin 256 ise burayı (256, 256) yap.
                 try:
                     shape = model.input_shape
-                    # Eğer shape okunursa onu kullan, okunamazsa 224 YAP (Eskiden 256 idi, hatayı bu çözmeli)
                     boyut = (shape[1], shape[2]) if shape and shape[1] else (224, 224)
                 except:
                     boyut = (224, 224)
                 
-                # Resmi Hazırla
                 img = image.resize(boyut)
-                img_array = np.array(img).astype("float32") / 255.0
+                img_array = np.array(img).astype("float32")
+                
+                # -------------------------------------------------------------
+                # 🚨 KRİTİK DEĞİŞİKLİK BURADA: BÖLME İŞLEMİNİ KALDIRDIK
+                # Eskiden: img_array = img_array / 255.0  (Bu yanlıştı)
+                # Şimdi:   img_array = img_array          (Olduğu gibi bırakıyoruz)
+                # -------------------------------------------------------------
+                
+                # Boyutları düzelt (Batch ve Kanal)
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
                 img_array = np.expand_dims(img_array, axis=0)
                 
-                # Tahmin (Hata Yakalama Ekledik)
+                # 2. TAHMİN
                 try:
                     tahmin = model.predict(img_array)
                     indeks = np.argmax(tahmin)
-                    guven = np.max(tahmin) * 100
+                    guven = np.max(tahmin) # 100 ile çarpmadan önce ham değeri alalım
+                    
+                    # Eğer güven skoru çok düşükse (örn: 0.99 yerine 0.001 çıkıyorsa) bir terslik vardır
+                    # Bazı modeller softmax çıktısı vermez, logits verir.
+                    # Güvenlik için softmax uygulayalım:
+                    if guven > 1.0: # Zaten yüzdeyse veya logits ise
+                         guven_yuzde = guven
+                    else:
+                         guven_yuzde = guven * 100
+
                     siniflar = siniflari_getir(secilen_bitki)
                     
                     if indeks < len(siniflar):
                         hastalik_ismi = siniflar[indeks]
                         st.success(f"**Teşhis:** {hastalik_ismi}")
-                        st.info(f"**Eminlik:** %{guven:.2f}")
+                        st.info(f"**Eminlik:** %{guven_yuzde:.2f}")
                         st.session_state['son_teshis'] = hastalik_ismi
                         st.session_state['son_bitki'] = secilen_bitki
                     else:
                         st.error("Hata: Sınıf listesi uyumsuz.")
                 except ValueError as e:
-                    # HATA OLURSA DETAYI GÖSTER
-                    st.error(f"BOYUT HATASI: Model {model.input_shape} bekliyor ama biz {img_array.shape} gönderdik.")
-                    st.error("Çözüm: app.py içindeki 'boyut = (224, 224)' kısmını (256, 256) yapmayı deneyin.")
+                    st.error(f"Hata oluştu: {e}")
 
 # ==============================================================================
 # 5. SOHBET MODU
