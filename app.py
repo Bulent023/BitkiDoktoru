@@ -5,31 +5,32 @@ from PIL import Image, ImageOps
 import google.generativeai as genai
 
 # ==============================================================================
-# 1. AYARLAR VE API ANAHTARI
+# 1. AYARLAR VE GÜVENLİ API BAĞLANTISI (SECRETS)
 # ==============================================================================
-# 👇 SENİN VERDİĞİN API KEY'İ BURAYA YERLEŞTİRDİM 👇
-GOOGLE_API_KEY = "AIzaSyAnViuUVRz8H6Vj0kNU7-DPOskQMUEjrIA"
-
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# GEMINI CHATBOT (404 HATASI ÇÖZÜMÜ) 🤖
-# Modelleri sırayla dener, hangisi çalışırsa onu seçer.
 chatbot_aktif = False
 try:
-    genai.configure(api_key=GOOGLE_API_KEY)
-    # Önce en yeni ve hızlı modeli deneyelim
+    # Anahtarı kodun içinden değil, Streamlit Secrets (Gizli Kasa)'dan alıyoruz.
+    # Böylece GitHub'a yükleyince silinmiyor!
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    
+    genai.configure(api_key=api_key)
+    # En yeni modeli dene
     model_gemini = genai.GenerativeModel('gemini-1.5-flash')
-    # Test edelim
-    response = model_gemini.generate_content("test")
+    # Test atışı yap
+    model_gemini.generate_content("test")
     chatbot_aktif = True
-except:
+except Exception as e:
+    # Flash çalışmazsa Pro dene (Yedek)
     try:
-        # Olmazsa bir öncekini deneyelim (Yedek)
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        genai.configure(api_key=api_key)
         model_gemini = genai.GenerativeModel('gemini-1.0-pro')
-        response = model_gemini.generate_content("test")
+        model_gemini.generate_content("test")
         chatbot_aktif = True
-    except Exception as e:
-        # Eğer yine hata verirse ekrana basma, sadece chat'i kapat.
+    except:
+        st.warning("⚠️ Chatbot API anahtarı 'Secrets' kısmında bulunamadı veya hatalı.")
         chatbot_aktif = False
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
@@ -64,17 +65,11 @@ def model_yukle(bitki_tipi):
     return None
 
 # ==============================================================================
-# 3. SINIF LİSTESİ (KALİBRASYON SONUCU: 2=PAS, 0=LEKE) ✅
+# 3. SINIF LİSTESİ (2=PAS, 0=LEKE) ✅
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Elma (Apple)":
-        # Yaptığımız testlere göre en tutarlı sıralama:
-        # 0: Kara Leke 
-        # 1: Kara Çürüklük
-        # 2: Pas (Turuncu olan)
-        # 3: Sağlıklı
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
-        
     elif bitki_tipi == "Domates (Tomato)":
         return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
     elif bitki_tipi == "Mısır (Corn)":
@@ -83,7 +78,6 @@ def siniflari_getir(bitki_tipi):
         return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
     elif bitki_tipi == "Üzüm (Grape)":
         return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
-    
     return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
@@ -100,7 +94,7 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka renk filtrelerini deniyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # 1. BOYUT: 160x160 (Kalibrasyon sonucu)
+                # 1. BOYUT: 160x160
                 hedef_boyut = (160, 160)
                 img = image.resize(hedef_boyut) 
                 
@@ -111,11 +105,7 @@ if yuklenen_dosya:
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
 
-                # -------------------------------------------------------------
-                # 🎨 RENK DÜZELTME (PAS HASTALIĞI İÇİN KRİTİK)
-                # Model OpenCV (BGR) ile eğitildiği için RGB'yi ters çeviriyoruz.
-                # Bu olmazsa Turuncu pas lekesi -> Mavi leke gibi görünür ve Leke sanılır.
-                # -------------------------------------------------------------
+                # RENK DÜZELTME (BGR DÖNÜŞÜMÜ)
                 img_array = img_array[..., ::-1] 
 
                 # NORMALİZASYON YOK (0-255 Ham Veri)
@@ -133,7 +123,6 @@ if yuklenen_dosya:
                     
                     if indeks < len(siniflar):
                         sonuc_ismi = siniflar[indeks]
-                        
                         if "Sağlıklı" in sonuc_ismi:
                             st.success(f"**Teşhis:** {sonuc_ismi}")
                             st.balloons()
@@ -142,7 +131,6 @@ if yuklenen_dosya:
                         
                         st.info(f"**Güven Oranı:** %{guven:.2f}")
                         
-                        # Session Kaydı
                         st.session_state['son_teshis'] = sonuc_ismi
                         st.session_state['son_bitki'] = secilen_bitki
                     else:
@@ -170,4 +158,4 @@ if 'son_teshis' in st.session_state and chatbot_aktif:
                 except Exception as e:
                     st.error(f"Hata: {e}")
 elif 'son_teshis' in st.session_state and not chatbot_aktif:
-     st.warning("Chatbot şu an yanıt veremiyor (API anahtarı veya kota sorunu olabilir).")
+     st.warning("Chatbot anahtarı 'Secrets' içinde bulunamadı.")
