@@ -5,29 +5,22 @@ from PIL import Image
 import google.generativeai as genai
 
 # ==============================================================================
-# 1. AYARLAR VE API ANAHTARI
+# AYARLAR
 # ==============================================================================
-# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
-st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
+st.set_page_config(page_title="Ziraat AI - Dedektif Modu", page_icon="🕵️‍♂️")
 
-# Gemini Modelini Kur (GARANTİ ÇÖZÜM: GEMINI PRO)
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Flash yerine Pro kullanıyoruz. 404 hatası kesin çözülecek.
     model_gemini = genai.GenerativeModel('gemini-pro')
     chatbot_aktif = True
-except Exception as e:
-    st.error(f"Chatbot bağlantı hatası: {e}")
+except:
     chatbot_aktif = False
 
-st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
-st.markdown("---")
+st.title("🕵️‍♂️ Ziraat AI - Sıralama Testi")
+st.warning("Bu mod, hangi hastalığın hangi sırada olduğunu bulmak içindir.")
 
-# ==============================================================================
-# 2. MODEL YÜKLEME
-# ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
     mapper = {
@@ -53,116 +46,45 @@ def model_yukle(bitki_tipi):
             return None
     return None
 
-# ==============================================================================
-# 3. SINIF İSİMLERİ
-# ==============================================================================
+# ŞİMDİLİK BU LİSTE ÖNEMLİ DEĞİL, ÇÜNKÜ TÜM OLASILIKLARI GÖRECEĞİZ
 def siniflari_getir(bitki_tipi):
-    if bitki_tipi == "Domates (Tomato)":
-        return ['Bakteriyel Leke', 'Geç Yanıklık', 'Erken Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
-    elif bitki_tipi == "Elma (Apple)":
+    if bitki_tipi == "Elma (Apple)":
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
-    elif bitki_tipi == "Mısır (Corn)":
-        return ['Mısır Gri Yaprak Lekesi', 'Mısır Yaygın Pas', 'Mısır Kuzey Yaprak Yanıklığı', 'Mısır Sağlıklı']
-    elif bitki_tipi == "Patates (Potato)":
-        return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
-    elif bitki_tipi == "Üzüm (Grape)":
-        return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
-    elif bitki_tipi == "Biber (Pepper)":
-        return ['Biber Bakteriyel Leke', 'Biber Sağlıklı']
-    elif bitki_tipi == "Şeftali (Peach)":
-        return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
-    elif bitki_tipi == "Çilek (Strawberry)":
-        return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
-    return ["Bilinmiyor", "Sağlıklı", "Hastalık"]
+    # Diğerleri aynı kalabilir...
+    return ["Sınıf 1", "Sınıf 2", "Sınıf 3", "Sınıf 4", "Sınıf 5", "Sınıf 6", "Sınıf 7", "Sınıf 8", "Sınıf 9", "Sınıf 10"]
 
-# ==============================================================================
-# 4. ARAYÜZ VE ANALİZ (DOĞRULUK İÇİN DÜZELTİLDİ)
-# ==============================================================================
-secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
-yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
+secilen_bitki = st.selectbox("Bitki Seçin", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)"])
+yuklenen_dosya = st.file_uploader("Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
 
-if yuklenen_dosya:
-    image = Image.open(yuklenen_dosya)
-    st.image(image, caption='Yüklenen Fotoğraf', use_container_width=True)
-    
-    if st.button("🔍 Hastalığı Analiz Et", type="primary"):
-        with st.spinner('Yapay zeka inceliyor...'):
-            model = model_yukle(secilen_bitki)
-            if model:
-                # --- DOĞRULUK İÇİN KRİTİK AYARLAR ---
-                
-                # 1. STANDART RESIZE (Sündürme)
-                # ImageOps.fit yerine bunu kullanıyoruz. Yaprağın kenarındaki hastalıkları kesmemek için.
-                hedef_boyut = (224, 224) 
-                
-                # Modelin input_shape'i varsa onu kullan, yoksa 224 devam et
-                try:
-                    if model.input_shape and model.input_shape[1]:
-                        hedef_boyut = (model.input_shape[1], model.input_shape[2])
-                except:
-                    pass
+if yuklenen_dosya and st.button("🔍 Detaylı Analiz Et"):
+    with st.spinner('Modelin beyni okunuyor...'):
+        model = model_yukle(secilen_bitki)
+        image = Image.open(yuklenen_dosya)
+        st.image(image, caption='Yüklenen Resim', width=300)
 
-                # Resmi Sündürerek Boyutlandır (Eğitimde genelde bu kullanılır)
-                img = image.resize(hedef_boyut)
-                img_array = np.array(img).astype("float32")
-                
-                # Renk kanalı kontrolü (RGBA -> RGB)
-                if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
-                elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
-                
-                # 2. NORMALİZASYON (0-1 Arası)
-                # %99 başarıyı bununla almıştın, bunu tutuyoruz.
-                img_array = img_array / 255.0
-                
-                img_array = np.expand_dims(img_array, axis=0)
-                
-                # 3. TAHMİN VE MATEMATİK DÜZELTMESİ
-                try:
-                    ham_tahmin = model.predict(img_array)
-                    
-                    # Eksi sayıları düzeltmek için SOFTMAX uyguluyoruz
-                    olasiliklar = tf.nn.softmax(ham_tahmin).numpy()
-                    
-                    indeks = np.argmax(olasiliklar)
-                    guven = np.max(olasiliklar) * 100
-                    
-                    siniflar = siniflari_getir(secilen_bitki)
-                    
-                    if indeks < len(siniflar):
-                        hastalik_ismi = siniflar[indeks]
-                        
-                        if "Sağlıklı" in hastalik_ismi:
-                            st.success(f"**Teşhis:** {hastalik_ismi}")
-                        else:
-                            st.error(f"**Teşhis:** {hastalik_ismi}")
-                            
-                        st.info(f"**Güven Oranı:** %{guven:.2f}")
-                        
-                        # Session kaydı
-                        st.session_state['son_teshis'] = hastalik_ismi
-                        st.session_state['son_bitki'] = secilen_bitki
-                    else:
-                        st.error("Sınıf listesi hatası.")
-                        
-                except Exception as e:
-                    st.error(f"Tahmin hatası: {e}")
+        if model:
+            # GÖRÜNTÜ İŞLEME (Senin %99 aldığın ayarlar)
+            img = image.resize((224, 224))
+            img_array = np.array(img).astype("float32") / 255.0
+            if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
+            elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
+            img_array = np.expand_dims(img_array, axis=0)
 
-# ==============================================================================
-# 5. SOHBET MODU (GEMINI PRO)
-# ==============================================================================
-if 'son_teshis' in st.session_state and chatbot_aktif:
-    st.markdown("---")
-    st.subheader(f"🤖 Ziraat Asistanı ile Konuşun")
-    st.write(f"**Konu:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
-    
-    soru = st.text_input("Sorunuzu buraya yazın...")
-    
-    if st.button("Soruyu Gönder"):
-        if soru:
-            with st.spinner('Cevap hazırlanıyor...'):
-                prompt = f"Sen bir ziraat mühendisisin. Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}. Soru: {soru}. Kısa ve net cevap ver."
-                try:
-                    cevap = model_gemini.generate_content(prompt)
-                    st.write(cevap.text)
-                except Exception as e:
-                    st.error(f"Hata: {e}")
+            # TAHMİN
+            preds = model.predict(img_array)
+            olasiliklar = tf.nn.softmax(preds).numpy()[0] # Softmax ile yüzdeleri düzelt
+
+            st.write("### 📊 Modelin Aklındaki Tüm Sıralama:")
+            
+            # Tüm sınıfların yüzdelerini tek tek yazdırıyoruz
+            mevcut_liste = siniflari_getir(secilen_bitki)
+            
+            for i, skor in enumerate(olasiliklar):
+                yuzde = skor * 100
+                cubuk = "🟩" * int(yuzde / 5)
+                # Eğer listede isim varsa yaz, yoksa Sınıf X yaz
+                isim = mevcut_liste[i] if i < len(mevcut_liste) else f"Sınıf {i}"
+                
+                st.write(f"**Sıra {i} ({isim}):** %{yuzde:.2f}  {cubuk}")
+
+            st.info("👆 Lütfen yukarıdaki listede EN YÜKSEK (yeşil çubuğu en uzun) olanın 'Sıra Numarasını' bana söyle.")
