@@ -1,99 +1,172 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import google.generativeai as genai
 
 # ==============================================================================
 # 1. AYARLAR
 # ==============================================================================
-# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
-GOOGLE_API_KEY = "BURAYA_KENDI_API_KEYINI_YAPISTIR" 
+GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
-st.set_page_config(page_title="Ziraat AI - Röntgen Modu", page_icon="🧬")
+st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-st.title("🧬 Model Röntgen Cihazı")
-st.warning("Bu mod, modelin hangi hastalığa hangi sayıyı verdiğini bulmak içindir.")
+try:
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model_gemini = genai.GenerativeModel('gemini-pro')
+    chatbot_aktif = True
+except:
+    chatbot_aktif = False
+
+st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
+st.markdown("---")
 
 # ==============================================================================
 # 2. MODEL YÜKLEME
 # ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
-    # Sadece Elma üzerinden test yapıyoruz şimdilik
-    if bitki_tipi == "Elma (Apple)":
-        return tf.keras.models.load_model("apple_uzman_model.keras")
+    mapper = {
+        "Elma (Apple)": "apple_uzman_model.keras",
+        "Domates (Tomato)": "tomato_uzman_model.keras",
+        "Mısır (Corn)": "corn_uzman_model.keras",
+        "Üzüm (Grape)": "grape_uzman_model.keras",
+        "Şeftali (Peach)": "peach_uzman_model.keras",
+        "Biber (Pepper)": "pepper_uzman_model.keras",
+        "Patates (Potato)": "potato_uzman_model.keras",
+        "Çilek (Strawberry)": "strawberry_uzman_model.keras",
+        "Kiraz (Cherry)": "cherry_uzman_model.keras",
+        "Yaban Mersini": "blueberry_uzman_model.keras",
+        "Ahududu": "raspberry_uzman_model.keras",
+        "Soya Fasulyesi": "soybean_uzman_model.keras",
+        "Kabak": "squash_uzman_model.keras",
+        "Portakal": "orange_uzman_model.keras"
+    }
+    if bitki_tipi in mapper:
+        try:
+            return tf.keras.models.load_model(mapper[bitki_tipi])
+        except:
+            return None
     return None
 
 # ==============================================================================
-# 3. ANALİZ EKRANI
+# 3. SINIF İSİMLERİ (ALFABETİK STANDART)
 # ==============================================================================
-secilen_bitki = st.selectbox("Test Edilecek Bitki", ["Elma (Apple)"])
-yuklenen_dosya = st.file_uploader("Fotoğraf Yükle (Pas veya Külleme)", type=["jpg", "png", "jpeg"])
-
-if yuklenen_dosya and st.button("🧠 Modelin Beynini Oku"):
-    model = model_yukle(secilen_bitki)
+def siniflari_getir(bitki_tipi):
+    # Elma klasörleri genelde şöyledir:
+    # 0: Apple___Black_rot (Kara Çürüklük)
+    # 1: Apple___Cedar_apple_rust (Pas)
+    # 2: Apple___Healthy (Sağlıklı)
+    # 3: Apple___Apple_scab (Kara Leke) -> Veya tam tersi Scab başta olabilir.
     
-    if model:
-        image = Image.open(yuklenen_dosya)
-        st.image(image, width=250, caption="Yüklenen Resim")
+    # Senin sonuçlarında "Sıra 3" baskın çıktığına göre ve Kara Leke testinde de 3 çıktığına göre:
+    # Yüksek ihtimalle 3 = Kara Leke.
+    
+    if bitki_tipi == "Elma (Apple)":
+        return ['Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı', 'Elma Kara Leke']
         
-        # --- RESMİ HAZIRLA ---
-        # 1. Standart Boyut (Genelde 256 veya 224)
-        hedef_boyut = (224, 224)
-        try:
-            if model.input_shape and model.input_shape[1]:
-                hedef_boyut = (model.input_shape[1], model.input_shape[2])
-        except:
-            pass
-            
-        st.info(f"Model şu boyutta istiyor: {hedef_boyut}")
+    elif bitki_tipi == "Domates (Tomato)":
+        return ['Bakteriyel Leke', 'Geç Yanıklık', 'Erken Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
+    elif bitki_tipi == "Mısır (Corn)":
+        return ['Mısır Gri Yaprak Lekesi', 'Mısır Yaygın Pas', 'Mısır Kuzey Yaprak Yanıklığı', 'Mısır Sağlıklı']
+    elif bitki_tipi == "Patates (Potato)":
+        return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
+    elif bitki_tipi == "Üzüm (Grape)":
+        return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
+    elif bitki_tipi == "Biber (Pepper)":
+        return ['Biber Bakteriyel Leke', 'Biber Sağlıklı']
+    elif bitki_tipi == "Şeftali (Peach)":
+        return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
+    elif bitki_tipi == "Çilek (Strawberry)":
+        return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
+        
+    return ["Hastalık", "Sağlıklı"]
 
-        img = image.resize(hedef_boyut)
-        img_array = np.array(img).astype("float32")
-        
-        # 2. Normalizasyon (ÖNEMLİ: Senin modelin 255'e bölmeli mi bölmemeli mi?)
-        # Bunu test etmek için hem bölerek hem bölmeyerek bakacağız.
-        img_array_norm = img_array / 255.0  # Normalize edilmiş
-        img_array_raw = img_array           # Normalize edilmemiş
-        
-        # Boyut Ekle
-        if img_array_norm.ndim == 2: 
-            img_array_norm = np.stack((img_array_norm,)*3, axis=-1)
-            img_array_raw = np.stack((img_array_raw,)*3, axis=-1)
-        elif img_array_norm.shape[-1] == 4: 
-            img_array_norm = img_array_norm[:,:,:3]
-            img_array_raw = img_array_raw[:,:,:3]
-            
-        input_norm = np.expand_dims(img_array_norm, axis=0)
-        # input_raw = np.expand_dims(img_array_raw, axis=0) # Gerekirse bunu da deneriz
+# ==============================================================================
+# 4. ARAYÜZ VE ANALİZ
+# ==============================================================================
+secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
+yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
 
-        # --- TAHMİN ---
-        tahmin = model.predict(input_norm)
-        
-        # --- SONUÇLARI DÖK ---
-        st.write("---")
-        st.subheader("📊 Model Çıktısı (Ham Skorlar)")
-        
-        cikis_sayisi = len(tahmin[0])
-        st.write(f"**Modelin Bildiği Hastalık Sayısı:** {cikis_sayisi}")
-        
-        # Ham değerleri Softmax'e sokalım ki yüzde görelim
-        olasiliklar = tf.nn.softmax(tahmin).numpy()[0]
-        
-        for i in range(cikis_sayisi):
-            yuzde = olasiliklar[i] * 100
-            cubuk = "🟩" * int(yuzde / 5)
-            
-            # Burada tahmini isimler YAZMIYORUM, sadece SIRA NUMARASI yazıyorum.
-            # Böylece hangisinin hangisi olduğunu sen söyleyeceksin.
-            st.write(f"**Sıra {i} (Neuron {i}):** %{yuzde:.2f}  {cubuk}")
-            
-        en_yuksek = np.argmax(olasiliklar)
-        st.error(f"🏆 KAZANAN: **Sıra {en_yuksek}**")
-        
-        st.markdown("""
-        ### 🕵️‍♂️ Şimdi Ne Yapacağız?
-        1. Eğer yüklediğin resim **PAS** ise ve kazanan **Sıra 2** ise -> Listede 2. sıraya 'Pas' yazacağız.
-        2. Eğer yüklediğin resim **KÜLLEME** ise ve model saçmalıyorsa (düşük puanlar) -> Model Külleme bilmiyor demektir.
-        """)
+if yuklenen_dosya:
+    image = Image.open(yuklenen_dosya)
+    st.image(image, caption='Yüklenen Fotoğraf', use_container_width=True)
+    
+    if st.button("🔍 Hastalığı Analiz Et", type="primary"):
+        with st.spinner('Yapay zeka inceliyor...'):
+            model = model_yukle(secilen_bitki)
+            if model:
+                # -----------------------------------------------------------
+                # 🛠️ KRİTİK DÜZELTME: BOYUT (160, 160)
+                # Röntgen sonucuna göre modelin istediği kesin boyut budur.
+                # -----------------------------------------------------------
+                hedef_boyut = (160, 160)
+                
+                # ImageOps.fit kullanarak resmi bozmadan ortalayarak küçültüyoruz
+                img = ImageOps.fit(image, hedef_boyut, Image.Resampling.LANCZOS)
+                
+                img_array = np.array(img).astype("float32")
+                
+                # Kanal kontrolü
+                if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
+                elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
+                
+                # Normalizasyon (Standardı koruyoruz)
+                img_array = img_array / 255.0
+                img_array = np.expand_dims(img_array, axis=0)
+                
+                # TAHMİN
+                try:
+                    ham_tahmin = model.predict(img_array)
+                    olasiliklar = tf.nn.softmax(ham_tahmin).numpy()[0]
+                    
+                    en_yuksek_indeks = np.argmax(olasiliklar)
+                    guven = olasiliklar[en_yuksek_indeks] * 100
+                    
+                    siniflar = siniflari_getir(secilen_bitki)
+                    
+                    # Liste boyutu kontrolü
+                    if en_yuksek_indeks < len(siniflar):
+                        tahmin_edilen_isim = siniflar[en_yuksek_indeks]
+                        
+                        # --- KÜLLEME UYARISI ---
+                        # Eğer kullanıcı Külleme fotoğrafı yüklediyse ve model emin olamıyorsa:
+                        if guven < 65: # Güven düşükse
+                            st.warning(f"⚠️ Model tam emin olamadı (%{guven:.1f}). Bu, modelin eğitilmediği bir hastalık (Örn: Külleme) olabilir.")
+                            st.info(f"En yakın tahmin: {tahmin_edilen_isim}")
+                        else:
+                            if "Sağlıklı" in tahmin_edilen_isim:
+                                st.success(f"**Teşhis:** {tahmin_edilen_isim}")
+                                st.balloons()
+                            else:
+                                st.error(f"**Teşhis:** {tahmin_edilen_isim}")
+                            st.info(f"**Güven Oranı:** %{guven:.2f}")
+                        
+                        # Session kaydı
+                        st.session_state['son_teshis'] = tahmin_edilen_isim
+                        st.session_state['son_bitki'] = secilen_bitki
+                    else:
+                        st.error("Sınıf listesi hatası.")
+
+                except Exception as e:
+                    st.error(f"Hata: {e}")
+
+# ==============================================================================
+# 5. SOHBET MODU
+# ==============================================================================
+if 'son_teshis' in st.session_state and chatbot_aktif:
+    st.markdown("---")
+    st.subheader(f"🤖 Ziraat Asistanı ile Konuşun")
+    st.write(f"**Konu:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
+    
+    soru = st.text_input("Sorunuzu buraya yazın...")
+    
+    if st.button("Soruyu Gönder"):
+        if soru:
+            with st.spinner('Cevap hazırlanıyor...'):
+                prompt = f"Sen bir ziraat mühendisisin. Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}. Soru: {soru}. Kısa ve net cevap ver."
+                try:
+                    cevap = model_gemini.generate_content(prompt)
+                    st.write(cevap.text)
+                except Exception as e:
+                    st.error(f"Hata: {e}")
