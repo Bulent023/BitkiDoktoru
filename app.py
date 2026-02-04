@@ -4,38 +4,55 @@ import numpy as np
 from PIL import Image, ImageOps
 import google.generativeai as genai
 
+# ==============================================================================
+# 1. AYARLAR VE OTOMATİK MODEL SEÇİCİ (AUTO-DISCOVERY) 🤖
+# ==============================================================================
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
-st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 
-# ==============================================================================
-# 🔍 TANI KOYMA MODU (DEBUG)
-# ==============================================================================
 chatbot_aktif = False
+aktif_model_ismi = "Bulunamadı"
 
-# 1. KASA KONTROLÜ
-if "GOOGLE_API_KEY" in st.secrets:
-    st.toast("✅ Kasa Bağlantısı Başarılı: Anahtar bulundu.")
-    api_key = st.secrets["GOOGLE_API_KEY"]
-    
-    # 2. ANAHTAR SAĞLAM MI KONTROLÜ
-    try:
+try:
+    # 1. Anahtarı Kasa'dan Al
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=api_key)
-        model_gemini = genai.GenerativeModel('gemini-1.5-flash')
-        response = model_gemini.generate_content("Merhaba")
-        chatbot_aktif = True
-        st.toast("✅ Google Gemini Bağlantısı Başarılı!")
-    except Exception as e:
-        st.error(f"🚨 ANAHTAR HATASI: Kasa dolu ama anahtar çalışmıyor. Google'dan gelen hata: {e}")
-        chatbot_aktif = False
-else:
-    st.error("🚨 KASA HATASI: 'Secrets' içinde 'GOOGLE_API_KEY' bulunamadı.")
-    st.info("Lütfen Streamlit panelindeki 'Secrets' ayarını kontrol et.")
+        
+        # 2. OTOMATİK MODEL SEÇME DÖNGÜSÜ (Senin hatırladığın kısım)
+        # Google'a soruyoruz: "Elinizde hangi modeller var?"
+        uygun_modeller = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                uygun_modeller.append(m.name)
+        
+        # Eğer uygun model varsa ilkini seç
+        if uygun_modeller:
+            # Öncelik 'gemini' içerenlerde olsun
+            secilen_model = next((m for m in uygun_modeller if 'gemini' in m), uygun_modeller[0])
+            
+            model_gemini = genai.GenerativeModel(secilen_model)
+            aktif_model_ismi = secilen_model
+            
+            # Test atışı
+            model_gemini.generate_content("Test")
+            chatbot_aktif = True
+        else:
+            st.error("🚨 API Anahtarı geçerli ama erişilebilir model bulunamadı.")
+            
+    else:
+        st.error("🚨 Kasa Hatası: Secrets içinde GOOGLE_API_KEY yok.")
+
+except Exception as e:
+    st.warning(f"⚠️ Sohbet başlatılamadı (Hata: {e})")
     chatbot_aktif = False
 
+st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
+if chatbot_aktif:
+    st.caption(f"✅ Bağlı Model: `{aktif_model_ismi}`") # Hangi modeli bulduğunu ekrana yazar
 st.markdown("---")
 
 # ==============================================================================
-# MODEL YÜKLEME VE TEŞHİS (Standart Kod)
+# 2. MODEL YÜKLEME
 # ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
@@ -62,6 +79,9 @@ def model_yukle(bitki_tipi):
             return None
     return None
 
+# ==============================================================================
+# 3. SINIF LİSTESİ (2=PAS, 0=LEKE) ✅
+# ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Elma (Apple)":
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
@@ -75,6 +95,9 @@ def siniflari_getir(bitki_tipi):
         return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
     return ["Hastalık", "Sağlıklı"]
 
+# ==============================================================================
+# 4. ARAYÜZ VE ANALİZ
+# ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
 
@@ -86,46 +109,68 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka analiz ediyor...'):
             model = model_yukle(secilen_bitki)
             if model:
+                # 1. BOYUT: 160x160
                 hedef_boyut = (160, 160)
                 img = image.resize(hedef_boyut) 
+                
+                # Array'e çevir
                 img_array = np.array(img).astype("float32")
+                
+                # Kanal temizliği
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
-                
-                # RENK DÜZELTME (BGR)
+
+                # RENK DÜZELTME (BGR DÖNÜŞÜMÜ - PAS HASTALIĞI İÇİN ŞART)
                 img_array = img_array[..., ::-1] 
+
+                # NORMALİZASYON YOK (0-255 Ham Veri)
                 input_data = np.expand_dims(img_array, axis=0)
                 
+                # TAHMİN
                 try:
                     tahmin = model.predict(input_data)
                     olasiliklar = tf.nn.softmax(tahmin).numpy()[0]
+                    
                     indeks = np.argmax(olasiliklar)
                     guven = olasiliklar[indeks] * 100
+                    
                     siniflar = siniflari_getir(secilen_bitki)
                     
                     if indeks < len(siniflar):
                         sonuc_ismi = siniflar[indeks]
                         if "Sağlıklı" in sonuc_ismi:
                             st.success(f"**Teşhis:** {sonuc_ismi}")
+                            st.balloons()
                         else:
                             st.error(f"**Teşhis:** {sonuc_ismi}")
+                        
                         st.info(f"**Güven Oranı:** %{guven:.2f}")
+                        
                         st.session_state['son_teshis'] = sonuc_ismi
                         st.session_state['son_bitki'] = secilen_bitki
+                    else:
+                        st.error("Liste hatası.")
                 except Exception as e:
                     st.error(f"Tahmin hatası: {e}")
 
-# SOHBET KISMI
+# ==============================================================================
+# 5. SOHBET MODU
+# ==============================================================================
 if 'son_teshis' in st.session_state and chatbot_aktif:
     st.markdown("---")
-    st.subheader("🤖 Ziraat Asistanı")
-    soru = st.text_input("Sorunuzu yazın...")
+    st.subheader(f"🤖 Ziraat Asistanı ile Konuşun")
+    st.write(f"**Durum:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
+    
+    soru = st.text_input("Sorunuzu buraya yazın...")
+    
     if st.button("Soruyu Gönder"):
         if soru:
-            try:
-                cevap = model_gemini.generate_content(f"Bitki: {st.session_state['son_bitki']}, Durum: {st.session_state['son_teshis']}. Soru: {soru}")
-                st.write(cevap.text)
-            except Exception as e:
-                st.error(f"Hata: {e}")
-elif not chatbot_aktif:
-    st.warning("⚠️ Chatbot devre dışı. Lütfen yukarıdaki kırmızı hata mesajını okuyun.")
+            with st.spinner('Cevaplanıyor...'):
+                prompt = f"Sen uzman bir ziraat mühendisisin. Kullanıcının bitkisi: {st.session_state['son_bitki']}. Teşhis edilen hastalık: {st.session_state['son_teshis']}. Kullanıcı sorusu: '{soru}'. Bu soruya kısa, öz ve çiftçi dostu bir dille cevap ver. Tedavi yöntemlerinden bahset."
+                try:
+                    cevap = model_gemini.generate_content(prompt)
+                    st.write(cevap.text)
+                except Exception as e:
+                    st.error(f"Hata: {e}")
+elif 'son_teshis' in st.session_state and not chatbot_aktif:
+     st.warning("Chatbot şu an aktif değil.")
