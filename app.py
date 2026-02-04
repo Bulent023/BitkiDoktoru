@@ -7,26 +7,19 @@ import google.generativeai as genai
 # ==============================================================================
 # 1. AYARLAR VE API ANAHTARI
 # ==============================================================================
-# BURAYA KENDİ API KEY'İNİ DİKKATLİCE YAPIŞTIR (Tırnaklar kalacak)
+# 👇 BURAYA KENDİ API KEY'İNİ MUTLAKA YAZ! 👇
 GOOGLE_API_KEY = "AIzaSyC25FnENO9YyyPAlvfWTRyDHfrpii4Pxqg" 
 
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-# --- HATA AYIKLAYICI MODEL BAŞLATMA ---
-def gemini_modelini_baslat():
-    # 1. Kontrol: Anahtar girilmiş mi?
-    if not GOOGLE_API_KEY or "BURAYA" in GOOGLE_API_KEY:
-        return None, "Lütfen app.py dosyasındaki GOOGLE_API_KEY kısmına şifrenizi yazın."
-
-    try:
-        genai.configure(api_key=GOOGLE_API_KEY)
-        # Direkt flash modelini zorlayalım
-        return genai.GenerativeModel('gemini-1.5-flash'), "OK"
-    except Exception as e:
-        return None, f"Google Bağlantı Hatası: {str(e)}"
-
-# Modeli başlatmayı dene
-model_gemini, chatbot_durumu = gemini_modelini_baslat()
+# Gemini Modelini Kur
+try:
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model_gemini = genai.GenerativeModel('gemini-1.5-flash')
+    chatbot_aktif = True
+except Exception as e:
+    st.error(f"Chatbot hatası: {e}")
+    chatbot_aktif = False
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 st.markdown("---")
@@ -55,8 +48,7 @@ def model_yukle(bitki_tipi):
     if bitki_tipi in mapper:
         try:
             return tf.keras.models.load_model(mapper[bitki_tipi])
-        except Exception as e:
-            st.error(f"Model dosyası yüklenemedi! Hata: {e}")
+        except:
             return None
     return None
 
@@ -65,19 +57,7 @@ def model_yukle(bitki_tipi):
 # ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Domates (Tomato)":
-        # PlantVillage Standart Sırası (Bacterial, Early, Late...)
-        return [
-            'Bakteriyel Leke',           # 0
-            'Erken Yanıklık',            # 1
-            'Geç Yanıklık',              # 2
-            'Yaprak Küfü',               # 3
-            'Septoria Yaprak Lekesi',    # 4
-            'Örümcek Akarları',          # 5
-            'Hedef Leke',                # 6
-            'Sarı Yaprak Kıvırcıklığı',  # 7
-            'Mozaik Virüsü',             # 8
-            'Sağlıklı'                   # 9
-        ]
+        return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
     elif bitki_tipi == "Elma (Apple)":
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
     elif bitki_tipi == "Mısır (Corn)":
@@ -95,7 +75,7 @@ def siniflari_getir(bitki_tipi):
     return ["Hastalık Tespit Edildi", "Sağlıklı", "Bilinmiyor"]
 
 # ==============================================================================
-# 4. ARAYÜZ
+# 4. ARAYÜZ VE ANALİZ
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -108,59 +88,57 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka inceliyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # --- SABİT BOYUTLANDIRMA (224x224) ---
-                # Otomatik algılamayı kaldırdık, standart boyuta zorluyoruz.
-                boyut = (224, 224) 
+                # --- BOYUTLANDIRMA DÜZELTME ---
+                try:
+                    shape = model.input_shape
+                    # Eğer shape okunursa onu kullan, okunamazsa 224 YAP (Eskiden 256 idi, hatayı bu çözmeli)
+                    boyut = (shape[1], shape[2]) if shape and shape[1] else (224, 224)
+                except:
+                    boyut = (224, 224)
                 
+                # Resmi Hazırla
                 img = image.resize(boyut)
                 img_array = np.array(img).astype("float32") / 255.0
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
                 img_array = np.expand_dims(img_array, axis=0)
                 
-                tahmin = model.predict(img_array)
-                indeks = np.argmax(tahmin)
-                guven = np.max(tahmin) * 100
-                siniflar = siniflari_getir(secilen_bitki)
-                
-                if indeks < len(siniflar):
-                    hastalik_ismi = siniflar[indeks]
-                    # Eminlik oranı düşükse sarı, yüksekse yeşil göster
-                    if guven < 40:
-                        st.warning(f"**Teşhis:** {hastalik_ismi} (Emin Değilim)")
-                        st.write("⚠️ Model bu fotoğraftan çok emin olamadı. Lütfen daha net veya yakından bir fotoğraf deneyin.")
-                    else:
-                        st.success(f"**Teşhis:** {hastalik_ismi}")
+                # Tahmin (Hata Yakalama Ekledik)
+                try:
+                    tahmin = model.predict(img_array)
+                    indeks = np.argmax(tahmin)
+                    guven = np.max(tahmin) * 100
+                    siniflar = siniflari_getir(secilen_bitki)
                     
-                    st.info(f"**Eminlik:** %{guven:.2f}")
-                    st.session_state['son_teshis'] = hastalik_ismi
-                    st.session_state['son_bitki'] = secilen_bitki
-                else:
-                    st.error("Hata: Sınıf listesi uyumsuz.")
+                    if indeks < len(siniflar):
+                        hastalik_ismi = siniflar[indeks]
+                        st.success(f"**Teşhis:** {hastalik_ismi}")
+                        st.info(f"**Eminlik:** %{guven:.2f}")
+                        st.session_state['son_teshis'] = hastalik_ismi
+                        st.session_state['son_bitki'] = secilen_bitki
+                    else:
+                        st.error("Hata: Sınıf listesi uyumsuz.")
+                except ValueError as e:
+                    # HATA OLURSA DETAYI GÖSTER
+                    st.error(f"BOYUT HATASI: Model {model.input_shape} bekliyor ama biz {img_array.shape} gönderdik.")
+                    st.error("Çözüm: app.py içindeki 'boyut = (224, 224)' kısmını (256, 256) yapmayı deneyin.")
 
 # ==============================================================================
-# 5. SOHBET MODU (HATA GÖSTERGELİ)
+# 5. SOHBET MODU
 # ==============================================================================
-st.markdown("---")
-st.subheader("🤖 Ziraat Asistanı")
-
-# Eğer model başarıyla yüklendiyse sohbeti aç
-if chatbot_durumu == "OK":
-    if 'son_teshis' in st.session_state:
-        st.write(f"**Konu:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
-        soru = st.text_input("Sorunuzu buraya yazın (Örn: İlaç önerisi nedir?)")
-        
-        if st.button("Soruyu Gönder"):
-            if soru:
-                with st.spinner('Asistan cevaplıyor...'):
-                    prompt = f"Sen uzman bir ziraat mühendisisin. Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}. Soru: '{soru}'. Kısa ve net cevap ver."
-                    try:
-                        cevap = model_gemini.generate_content(prompt)
-                        st.markdown(f"**Cevap:** {cevap.text}")
-                    except Exception as e:
-                        st.error(f"Cevap alınırken hata: {e}")
-    else:
-        st.info("Sohbet etmek için önce yukarıdan bir bitki analiz etmelisiniz.")
-else:
-    # Eğer hata varsa sebebini ekrana KIRMIZI olarak bas
-    st.error(f"⚠️ Sohbet Modu Çalışmadı. Sebep: {chatbot_durumu}")
+if 'son_teshis' in st.session_state and chatbot_aktif:
+    st.markdown("---")
+    st.subheader(f"🤖 Ziraat Asistanı ile Konuşun")
+    st.write(f"**Durum:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
+    
+    soru = st.text_input("Sorunuzu buraya yazın (Örn: İlaç önerisi nedir?)")
+    
+    if st.button("Soruyu Gönder"):
+        if soru:
+            with st.spinner('Asistan cevaplıyor...'):
+                prompt = f"Sen uzman bir ziraat mühendisisin. Kullanıcının bitkisinde şu hastalık var: {st.session_state['son_bitki']} bitkisinde {st.session_state['son_teshis']}. Soru: '{soru}'. Kısa ve öz çözüm öner."
+                try:
+                    cevap = model_gemini.generate_content(prompt)
+                    st.markdown(f"**Cevap:** {cevap.text}")
+                except Exception as e:
+                    st.error(f"Bir hata oluştu: {e}")
