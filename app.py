@@ -322,16 +322,20 @@ with tab2:
 
 # --- SEKME 3: NASIL KULLANILIR? ---
 with tab3:
-    st.header("❓ Nasıl Kullanılır?")
+    # Yazıları siyah yapmak için arkaya BEYAZ bir kutu (Card) açıyoruz
     st.markdown("""
-    **Adım 1:** `Teşhis & Rapor` sekmesine gidin.
+    <div style="background-color: rgba(255, 255, 255, 0.9); padding: 25px; border-radius: 15px; border-left: 5px solid #4CAF50; color: black;">
+        <h2 style="color: #1b5e20; margin-top: 0;">❓ Nasıl Kullanılır?</h2>
+        <p style="font-size: 16px;">
+            <b>Adım 1:</b> Yukarıdaki <code>🌿 Teşhis & Rapor</code> sekmesine tıklayın.<br><br>
+            <b>Adım 2:</b> Listeden bitkinizin türünü seçin (Örn: Elma, Domates).<br><br>
+            <b>Adım 3:</b> Yaprağın fotoğrafını yükleyin. <i style="color: #d32f2f;">(Yakından ve net çekimler daha iyi sonuç verir.)</i><br><br>
+            <b>Adım 4:</b> <b>"Analiz Et"</b> butonuna basın. Yapay zeka hastalığı bulacak ve size otomatik reçete yazacaktır.<br><br>
+            <hr>
+            <b>Ekstra:</b> <code>🌤️ Bölgesel Veriler</code> sekmesinden şehrinizin hava durumuna ve yapay zeka destekli tarım takvimine bakabilirsiniz.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    **Adım 2:** Listeden bitkinizin türünü seçin (Örn: Elma, Domates).
-    
-    **Adım 3:** Yaprağın fotoğrafını yükleyin. Yakından ve net çekimler daha iyi sonuç verir.
-    
-    **Adım 4:** `Analiz Et` butonuna basın. Yapay zeka hastalığı bulacak ve size reçete yazacaktır.
-    
-    **Ekstra:** `Bölgesel Veriler` sekmesinden şehrinizin hava durumuna ve tarım takvimine bakabilirsiniz.
-    """)
-    st.image("https://images.unsplash.com/photo-1599583272937-23b5d37805d7?q=80&w=1470&auto=format&fit=crop", caption="Örnek Sağlıklı Yaprak Çekimi")
+    st.write("") # Biraz boşluk
+    st.image("https://images.unsplash.com/photo-1599583272937-23b5d37805d7?q=80&w=1470&auto=format&fit=crop", caption="Örnek: Net Çekilmiş Bir Yaprak Fotoğrafı")
