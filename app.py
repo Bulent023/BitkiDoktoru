@@ -18,12 +18,13 @@ if 'giris_yapildi' not in st.session_state: st.session_state['giris_yapildi'] = 
 if 'son_teshis' not in st.session_state: st.session_state['son_teshis'] = None
 if 'son_bitki' not in st.session_state: st.session_state['son_bitki'] = None
 if 'recete_hafizasi' not in st.session_state: st.session_state['recete_hafizasi'] = ""
+if 'aktif_model_ismi' not in st.session_state: st.session_state['aktif_model_ismi'] = None # Seçilen model burada saklanacak
 
 # --- CSS TASARIMI ---
 def tasariimi_uygula():
     bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
-    if os.path.exists("arkaplan.jpg"):
-        with open("arkaplan.jpg", "rb") as image_file:
+    if os.path.exists("arka_plan.jpg"):
+        with open("arka_plan.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image_style = f'background-image: url("data:image/jpg;base64,{encoded_string}");'
 
@@ -77,16 +78,56 @@ def create_pdf(bitki, hastalik, recete):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 2. MANUEL GEMINI BAĞLANTISI (Raw HTTP Request) 🛠️
+# 2. AKILLI MODEL SEÇİCİ VE BAĞLANTI (OTO PİLOT) 🧠
 # ==============================================================================
+def en_iyi_modeli_bul(api_key):
+    """API'deki tüm modelleri tarar ve en uygun olanı seçer."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            tum_modeller = response.json().get('models', [])
+            
+            # Tercih Sıralaması (En iyiden eskiye)
+            tercihler = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro']
+            
+            # 1. Adım: Tercih listesindekilerden biri var mı diye bak
+            for tercih in tercihler:
+                for m in tum_modeller:
+                    # Model isminin içinde tercih geçiyorsa VE metin üretebiliyorsa
+                    if tercih in m['name'] and 'generateContent' in m['supportedGenerationMethods']:
+                        return m['name'] # Örn: models/gemini-1.5-flash-001
+            
+            # 2. Adım: Tercihler yoksa, 'generateContent' yapabilen HERHANGİ bir gemini modelini al
+            for m in tum_modeller:
+                if 'gemini' in m['name'] and 'generateContent' in m['supportedGenerationMethods']:
+                    return m['name']
+                    
+        return "models/gemini-pro" # Hiçbir şey bulamazsa varsayılanı dene
+    except:
+        return "models/gemini-pro"
+
 def gemini_sor(prompt):
     if "GOOGLE_API_KEY" not in st.secrets:
         return "HATA: API Anahtarı bulunamadı."
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # Doğrudan REST API kullanıyoruz (Kütüphane derdi yok)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # --- MODEL SEÇİMİ (BİR KERE YAPILIR VE KAYDEDİLİR) ---
+    if st.session_state['aktif_model_ismi'] is None:
+        bulunan_model = en_iyi_modeli_bul(api_key)
+        st.session_state['aktif_model_ismi'] = bulunan_model
+    
+    secilen_model = st.session_state['aktif_model_ismi']
+    # -----------------------------------------------------
+
+    # Doğrudan URL oluştur (Model ismini otomatik bulduk)
+    # Eğer model ismi 'models/' ile başlamıyorsa ekle (API formatı gereği)
+    if not secilen_model.startswith("models/"):
+        secilen_model = f"models/{secilen_model}"
+        
+    url = f"https://generativelanguage.googleapis.com/v1beta/{secilen_model}:generateContent?key={api_key}"
+    
     headers = {'Content-Type': 'application/json'}
     data = {
         "contents": [{
@@ -99,6 +140,10 @@ def gemini_sor(prompt):
         if response.status_code == 200:
             return response.json()['candidates'][0]['content']['parts'][0]['text']
         else:
+            # Eğer 404 verirse demek ki o model o an çalışmadı, hafızayı silip tekrar aratalım
+            if response.status_code == 404:
+                st.session_state['aktif_model_ismi'] = None 
+                return "Model anlık hata verdi, lütfen tekrar butona basın (Yeni model aranacak)."
             return f"Hata Kodu: {response.status_code} - Mesaj: {response.text}"
     except Exception as e:
         return f"Bağlantı Hatası: {str(e)}"
@@ -126,7 +171,15 @@ else:
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
         st.title("Ziraat AI")
-        st.info("Mod: Manuel HTTP Bağlantısı (Güvenli)")
+        
+        # OTOMATİK BULUNAN MODELİ GÖSTER
+        if st.session_state['aktif_model_ismi']:
+            # 'models/' kısmını silip sadece ismini gösterelim
+            temiz_isim = st.session_state['aktif_model_ismi'].replace("models/", "")
+            st.success(f"Aktif Zeka: {temiz_isim}")
+        else:
+            st.info("Yapay Zeka Aranıyor...")
+            
         if st.button("🔙 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
@@ -198,7 +251,7 @@ else:
                                 st.session_state['recete_hafizasi'] = "Bitki sağlıklı. Koruyucu önlem olarak düzenli bakım yapınız."
                             else:
                                 st.error(f"⚠️ **Tespit:** {sonuc}")
-                                # --- GEMINI REÇETE (MANUEL) ---
+                                # --- GEMINI REÇETE (OTOMATİK MODEL İLE) ---
                                 prompt = f"Bitki: {secilen_bitki}, Hastalık: {sonuc}. Bu hastalık için 3 başlıkta bilgi ver: 1-Nedir, 2-Kültürel Önlem, 3-İlaçlı Mücadele."
                                 recete = gemini_sor(prompt)
                                 st.session_state['recete_hafizasi'] = recete
