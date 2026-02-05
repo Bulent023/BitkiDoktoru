@@ -2,7 +2,6 @@ import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image, ImageOps
-import google.generativeai as genai
 import time
 from fpdf import FPDF
 import base64 
@@ -22,14 +21,11 @@ if 'recete_hafizasi' not in st.session_state: st.session_state['recete_hafizasi'
 
 # --- CSS TASARIMI ---
 def tasariimi_uygula():
-    dosya_adi = "arkaplan.jpg"
-    bg_image_style = ""
-    if os.path.exists(dosya_adi):
-        with open(dosya_adi, "rb") as image_file:
+    bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
+    if os.path.exists("arkaplan.jpg"):
+        with open("arkaplan.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image_style = f'background-image: url("data:image/jpg;base64,{encoded_string}");'
-    else:
-        bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
 
     st.markdown(
         f"""
@@ -38,19 +34,16 @@ def tasariimi_uygula():
         div.stButton > button {{
             display: block !important; margin-left: auto !important; margin-right: auto !important;
             width: 70% !important; border-radius: 25px; font-weight: bold; font-size: 18px;
-            padding: 10px 20px; box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-            border: 2px solid white; background-color: #ff4b4b; color: white;
+            background-color: #ff4b4b; color: white; border: 2px solid white;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
         }}
-        div.stButton > button:hover {{ border-color: #ff4b4b; color: #ff4b4b; background-color: white; }}
         section[data-testid="stSidebar"] {{ background-color: rgba(15, 25, 15, 0.95) !important; border-right: 3px solid #4CAF50; }}
-        section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, p, label {{ color: white !important; }}
+        * {{ color: white; }}
         input[type="text"] {{ color: white !important; }}
         div[data-baseweb="input"] {{ background-color: rgba(20, 40, 20, 0.8) !important; border: 1px solid #4CAF50; }}
-        div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.8); color: white; border-radius: 10px; }}
-        div[data-testid="stTabs"] button[aria-selected="true"] {{ background-color: #4CAF50; color: white; }}
-        div.stInfo {{ background-color: rgba(0, 0, 0, 0.7) !important; color: white !important; border: 1px solid #2196F3; }}
-        div.stSuccess {{ background-color: rgba(0, 50, 0, 0.7) !important; color: white !important; }}
-        div.stError {{ background-color: rgba(50, 0, 0, 0.8) !important; color: white !important; }}
+        div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.8); border-radius: 10px; }}
+        div[data-testid="stTabs"] button[aria-selected="true"] {{ background-color: #4CAF50; }}
+        div.stInfo, div.stSuccess, div.stError {{ background-color: rgba(0, 0, 0, 0.8) !important; color: white !important; }}
         </style>
         """, unsafe_allow_html=True
     )
@@ -84,46 +77,39 @@ def create_pdf(bitki, hastalik, recete):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 2. GEMINI BAĞLANTISI (GARANTİ MODEL MODU) 🛠️
+# 2. MANUEL GEMINI BAĞLANTISI (Raw HTTP Request) 🛠️
 # ==============================================================================
-@st.cache_resource
-def gemini_baglan():
+def gemini_sor(prompt):
+    if "GOOGLE_API_KEY" not in st.secrets:
+        return "HATA: API Anahtarı bulunamadı."
+    
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    
+    # Doğrudan REST API kullanıyoruz (Kütüphane derdi yok)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+    
     try:
-        if "GOOGLE_API_KEY" in st.secrets:
-            api_key = st.secrets["GOOGLE_API_KEY"]
-            genai.configure(api_key=api_key)
-            
-            # SIRALAMAYI DEĞİŞTİRDİK: Önce 'gemini-pro' (En Garanti Olan)
-            # Bu model eski kütüphanelerde bile %100 çalışır.
-            modelleri_dene = [
-                'gemini-pro',          # 1. ÖNCELİK (Garanti)
-                'gemini-1.5-flash',    # 2. Öncelik (Varsa)
-                'gemini-1.5-pro'       # 3. Öncelik
-            ]
-            
-            for m in modelleri_dene:
-                try:
-                    test_model = genai.GenerativeModel(m)
-                    test_model.generate_content("Test")
-                    return test_model, m # Çalışan modeli döndür
-                except:
-                    continue 
-
-            return None, "Hiçbir model çalışmadı. API Kotanızı kontrol edin."
-            
-        return None, "API Anahtarı Yok"
-    except Exception as e: return None, str(e)
-
-model_gemini, aktif_model_ismi = gemini_baglan()
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"Hata Kodu: {response.status_code} - Mesaj: {response.text}"
+    except Exception as e:
+        return f"Bağlantı Hatası: {str(e)}"
 
 # ==============================================================================
 # 3. GİRİŞ EKRANI
 # ==============================================================================
 if not st.session_state['giris_yapildi']:
     st.write("")
-    st.write("") 
-    st.markdown("<h1 style='text-align: center; color: white; font-size: 50px; text-shadow: 3px 3px 6px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #e8f5e9; text-shadow: 1px 1px 2px #000000;'>Çiftçinin Dijital Asistanı</h3>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; font-size: 50px;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>Çiftçinin Dijital Asistanı</h3>", unsafe_allow_html=True)
     
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
     if lottie_intro: st_lottie(lottie_intro, height=250, key="intro_anim")
@@ -140,21 +126,13 @@ else:
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
         st.title("Ziraat AI")
-        
-        # DEBUG BİLGİSİ
-        st.caption(f"Kütüphane: {genai.__version__}")
-        
-        if model_gemini:
-            st.success(f"Model: {aktif_model_ismi}")
-        else:
-            st.error(f"⚠️ {aktif_model_ismi}")
-
+        st.info("Mod: Manuel HTTP Bağlantısı (Güvenli)")
         if st.button("🔙 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
     st.title("🌿 Akıllı Bitki Doktoru")
-    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi & Reçete", "🌤️ Bölgesel Hava Durumu ve Takvim", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Teşhis & Reçete", "🌤️ Bölge ve Takvim", "ℹ️ Yardım"])
 
     # --- SEKME 1: TEŞHİS & REÇETE ---
     with tab1:
@@ -220,15 +198,10 @@ else:
                                 st.session_state['recete_hafizasi'] = "Bitki sağlıklı. Koruyucu önlem olarak düzenli bakım yapınız."
                             else:
                                 st.error(f"⚠️ **Tespit:** {sonuc}")
-                                if model_gemini:
-                                    prompt = f"Bitki: {secilen_bitki}, Hastalık: {sonuc}. Bu hastalık için 3 başlıkta bilgi ver: 1-Nedir, 2-Kültürel Önlem, 3-İlaçlı Mücadele."
-                                    try:
-                                        recete = model_gemini.generate_content(prompt).text
-                                        st.session_state['recete_hafizasi'] = recete
-                                    except Exception as e:
-                                        st.session_state['recete_hafizasi'] = f"Reçete oluşturulamadı (Hata: {e})"
-                                else:
-                                    st.session_state['recete_hafizasi'] = "Yapay zeka bağlantısı yok."
+                                # --- GEMINI REÇETE (MANUEL) ---
+                                prompt = f"Bitki: {secilen_bitki}, Hastalık: {sonuc}. Bu hastalık için 3 başlıkta bilgi ver: 1-Nedir, 2-Kültürel Önlem, 3-İlaçlı Mücadele."
+                                recete = gemini_sor(prompt)
+                                st.session_state['recete_hafizasi'] = recete
                         except Exception as e: st.error(f"Hata: {e}")
 
             if st.session_state['son_teshis']:
@@ -243,12 +216,10 @@ else:
                 st.subheader("💬 Asistan")
                 soru = st.text_input("Sorunuz var mı?")
                 if st.button("Sor"):
-                    if model_gemini and soru:
+                    if soru:
                         with st.spinner("Cevaplanıyor..."):
-                            try:
-                                cevap = model_gemini.generate_content(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}").text
-                                st.write(cevap)
-                            except Exception as e: st.error(f"Cevap alınamadı: {e}")
+                            cevap = gemini_sor(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}")
+                            st.write(cevap)
 
     # --- SEKME 2: BÖLGE VE TAKVİM ---
     with tab2:
@@ -257,7 +228,6 @@ else:
         
         if st.button("Verileri Getir", type="primary"):
              try:
-                # 1. Hava Durumu
                 geo = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1").json()
                 if "results" in geo:
                     lat = geo["results"][0]["latitude"]
@@ -271,22 +241,14 @@ else:
                     c3.metric("Rüzgar", f"{w['wind_speed_10m']} km/s")
                     
                     st.markdown("---")
-                    
-                    # 2. Takvim
                     st.subheader("📅 Akıllı Takvim")
                     aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
                     simdiki_ay = aylar[int(time.strftime("%m")) - 1]
                     
-                    if model_gemini:
-                        with st.spinner(f"{simdiki_ay} ayı analiz ediliyor..."):
-                            try:
-                                prompt_takvim = f"{simdiki_ay} ayında {sehir} ilinde tarımsal olarak ne yapılır? 4 maddede özetle."
-                                takvim_cevap = model_gemini.generate_content(prompt_takvim).text
-                                st.info(f"**{simdiki_ay} Ayı Tavsiyeleri:**\n\n" + takvim_cevap)
-                            except Exception as e:
-                                st.error(f"Takvim oluşturulamadı. Hata: {e}")
-                    else:
-                        st.error("Yapay Zeka Bağlı Değil.")
+                    with st.spinner(f"{simdiki_ay} ayı analiz ediliyor..."):
+                        prompt_takvim = f"{simdiki_ay} ayında {sehir} ilinde tarımsal olarak ne yapılır? 4 maddede özetle."
+                        takvim_cevap = gemini_sor(prompt_takvim)
+                        st.info(f"**{simdiki_ay} Ayı Tavsiyeleri:**\n\n" + takvim_cevap)
                 else:
                     st.error("Şehir bulunamadı.")
              except Exception as e: st.error(f"Bağlantı Hatası: {e}")
