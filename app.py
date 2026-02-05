@@ -40,31 +40,28 @@ def tasariimi_uygula():
             background-size: cover;
         }}
         
-        /* --- DÜZELTİLEN KISIM: BUTON ORTALAMA (FLEXBOX) --- */
-        /* Butonun kapsayıcısını esnek kutu yap ve ortala */
-        .stButton {{
-            display: flex;
-            justify-content: center;
-        }}
-        
-        /* Butonun kendisinin özellikleri */
-        .stButton > button {{
-            width: auto !important;     /* Genişlik içeriğe göre olsun */
-            min-width: 250px;           /* Ama çok da küçülmesin */
-            max-width: 350px;           /* Çok da büyümesin */
-            border-radius: 25px;        /* Tam oval kenarlar */
+        /* --- KESİN ORTALAMA ÇÖZÜMÜ (MARGIN AUTO) --- */
+        div.stButton > button {{
+            display: block !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            width: 70% !important; /* Mobilde çok geniş olmasın diye %70 yaptık */
+            border-radius: 25px;
             font-weight: bold;
-            font-size: 18px;
+            font-size: 20px;
             padding: 12px 24px;
-            box-shadow: 0px 4px 10px rgba(0,0,0,0.4); /* Derinlik gölgesi */
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
             border: 2px solid white;
-            transition: transform 0.2s; /* Tıklama efekti için */
+            background-color: #ff4b4b; /* Buton rengini belirgin yapalım */
+            color: white;
         }}
         
-        .stButton > button:active {{
-            transform: scale(0.95); /* Tıklayınca hafif küçülsün */
+        div.stButton > button:hover {{
+            border-color: #ff4b4b;
+            color: #ff4b4b;
+            background-color: white;
         }}
-        /* -------------------------------------------------- */
+        /* ------------------------------------------ */
 
         /* Sidebar */
         section[data-testid="stSidebar"] {{
@@ -114,11 +111,9 @@ if not st.session_state['giris_yapildi']:
     st.write("")
     st.write("") 
     
-    # Başlıklar
     st.markdown("<h1 style='text-align: center; color: white; font-size: 50px; text-shadow: 3px 3px 6px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #e8f5e9; text-shadow: 1px 1px 2px #000000;'>Çiftçinin Dijital Asistanı</h3>", unsafe_allow_html=True)
     
-    # Animasyon
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
     if lottie_intro:
         st_lottie(lottie_intro, height=250, key="intro_anim")
@@ -126,12 +121,11 @@ if not st.session_state['giris_yapildi']:
     st.write("") 
     st.write("") 
     
-    # --- BUTON KISMI (SÜTUNSUZ - CSS İLE ORTALANDI) ---
-    # Artık columns kullanmıyoruz, CSS otomatik ortalıyor.
-    if st.button("🚀 UYGULAMAYI BAŞLAT", type="primary"):
+    # --- BUTON KISMI (SÜTUNSUZ) ---
+    # CSS'deki 'margin: auto' komutu bunu zorla ortalayacak.
+    if st.button("🚀 UYGULAMAYI BAŞLAT", key="baslat_butonu"):
         st.session_state['giris_yapildi'] = True
         st.rerun()
-    # --------------------------------------------------
 
 # ==============================================================================
 # 3. ANA UYGULAMA 🏗️
