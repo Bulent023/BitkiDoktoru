@@ -336,6 +336,3 @@ with tab3:
         </p>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.write("") # Biraz boşluk
-    st.image("https://images.unsplash.com/photo-1599583272937-23b5d37805d7?q=80&w=1470&auto=format&fit=crop", caption="Örnek: Net Çekilmiş Bir Yaprak Fotoğrafı")
