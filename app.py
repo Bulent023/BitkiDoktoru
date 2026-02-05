@@ -13,9 +13,14 @@ from streamlit_lottie import st_lottie
 # ==============================================================================
 # 1. AYARLAR VE GÖRSEL TASARIM
 # ==============================================================================
-st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿", layout="centered")
+st.set_page_config(page_title="Ziraat AI", page_icon="🌿", layout="centered")
 
-# --- ARKA PLAN VE SIDEBAR TASARIMI ---
+# --- SESSION STATE (DURUM KONTROLÜ) ---
+# Uygulama ilk açıldığında 'giris_yapildi' diye bir değişken yoksa, False olarak oluştur.
+if 'giris_yapildi' not in st.session_state:
+    st.session_state['giris_yapildi'] = False
+
+# --- ARKA PLAN TASARIMI ---
 def tasariimi_uygula():
     dosya_adi = "arkaplan.jpg"
     bg_image_style = ""
@@ -35,38 +40,37 @@ def tasariimi_uygula():
             background-attachment: fixed;
             background-size: cover;
         }}
+        /* Butonları Güzelleştir */
+        div.stButton > button {{
+            width: 100%;
+            border-radius: 10px;
+            font-weight: bold;
+        }}
+        /* Sidebar Tasarımı */
         section[data-testid="stSidebar"] {{
             background-color: rgba(15, 25, 15, 0.95) !important;
             border-right: 3px solid #4CAF50;
         }}
-        section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3, 
-        section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] div, section[data-testid="stSidebar"] p {{
-            color: #ffffff !important;
-            text-shadow: 1px 1px 2px black;
+        section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, p, label {{
+            color: white !important;
+        }}
+        /* Input Tasarımı */
+        input[type="text"] {{
+            color: white !important;
         }}
         div[data-baseweb="input"] {{
             background-color: rgba(20, 40, 20, 0.8) !important;
             border: 1px solid #4CAF50;
         }}
-        input[type="text"] {{
-            color: white !important;
-            caret-color: white;
-        }}
+        /* Sekme ve Expander */
         div[data-testid="stExpander"] {{
             background-color: rgba(0, 0, 0, 0.7);
             color: white;
             border-radius: 10px;
         }}
-        div[data-testid="stTabs"] button {{
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
-            border-radius: 5px;
-            margin: 2px;
-        }}
         div[data-testid="stTabs"] button[aria-selected="true"] {{
             background-color: #4CAF50;
             color: white;
-            font-weight: bold;
         }}
         </style>
         """,
@@ -75,55 +79,7 @@ def tasariimi_uygula():
 
 tasariimi_uygula()
 
-SORU_LIMITI = 20        
-BEKLEME_SURESI = 15     
-
-# ==============================================================================
-# 2. GEMINI BAĞLANTISI
-# ==============================================================================
-@st.cache_resource
-def gemini_baglan():
-    try:
-        if "GOOGLE_API_KEY" in st.secrets:
-            api_key = st.secrets["GOOGLE_API_KEY"]
-            genai.configure(api_key=api_key)
-            oncelikli_modeller = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro']
-            for m in oncelikli_modeller:
-                try:
-                    test_model = genai.GenerativeModel(m)
-                    test_model.generate_content("System check") 
-                    return test_model, m 
-                except: continue
-            tum_modeller = genai.list_models()
-            for m in tum_modeller:
-                if 'generateContent' in m.supported_generation_methods:
-                    if 'gemini-2.5' in m.name: continue 
-                    try:
-                        yedek_model = genai.GenerativeModel(m.name)
-                        yedek_model.generate_content("System check")
-                        return yedek_model, m.name
-                    except: continue
-            return None, "Model Bulunamadı"
-        return None, "Anahtar Yok"
-    except Exception as e:
-        return None, str(e)
-
-model_gemini, aktif_model_ismi = gemini_baglan()
-
-# ==============================================================================
-# 3. YAN MENÜ
-# ==============================================================================
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=100)
-    st.title("Ziraat AI")
-    st.write("Çiftçinin Dijital Dostu")
-    st.markdown("---")
-    st.info("Bu uygulama yapay zeka destekli olup, kesin sonuçlar için ziraat mühendisine danışmanız önerilir.")
-    st.caption(f"v1.6 | Model: {aktif_model_ismi}")
-
-# ==============================================================================
-# 4. KARŞILAMA ANİMASYONU (LOTTIE) 🎬
-# ==============================================================================
+# --- ANİMASYON YÜKLEME ---
 def load_lottieurl(url):
     try:
         r = requests.get(url)
@@ -131,224 +87,174 @@ def load_lottieurl(url):
         return r.json()
     except: return None
 
-lottie_coding = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
-
-st.title("🌿 Ziraat AI - Bitki Doktoru")
-
-col_text, col_anim = st.columns([2, 1])
-
-with col_text:
-    st.markdown("""
-    ### 🌱 Hoş Geldiniz!
-    Yapay zeka destekli asistanınız ile **hastalık teşhisi yapın**, **reçete alın** ve **bölgesel takvimi** takip edin.
+# ==============================================================================
+# 2. GİRİŞ EKRANI (SPLASH SCREEN) 🎬
+# ==============================================================================
+if not st.session_state['giris_yapildi']:
+    # --- GİRİŞ EKRANI TASARIMI ---
+    st.markdown("<h1 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #e8f5e9; text-shadow: 1px 1px 2px #000000;'>Akıllı Bitki Doktoru</h3>", unsafe_allow_html=True)
     
-    *Hemen başlamak için aşağıdan bir işlem seçin.*
-    """)
-
-with col_anim:
-    if lottie_coding:
-        st_lottie(lottie_coding, height=120, key="plant_animation")
+    # Animasyon (Büyüyen Bitki)
+    lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
+    if lottie_intro:
+        st_lottie(lottie_intro, height=300, key="intro_anim")
+    
+    # Boşluk bırak ve ortalanmış buton koy
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.write("")
+        if st.button("🚀 UYGULAMAYI BAŞLAT", type="primary"):
+            st.session_state['giris_yapildi'] = True
+            st.rerun() # Sayfayı yenile ve ana ekrana geç
 
 # ==============================================================================
-# 5. SEKMELER (TABS)
+# 3. ANA UYGULAMA (GİRİŞ YAPILDIYSA BURASI ÇALIŞIR) 🏗️
 # ==============================================================================
-tab1, tab2, tab3 = st.tabs(["🌿 Teşhis & Rapor", "🌤️ Bölgesel Veriler", "ℹ️ Nasıl Kullanılır?"])
-
-# --- SEKME 1: TEŞHİS VE RAPORLAMA ---
-with tab1:
-    st.markdown("### 📸 Fotoğraf Yükle ve Analiz Et")
-    
+else:
+    # --- GEMINI BAĞLANTISI ---
     @st.cache_resource
-    def model_yukle(bitki_tipi):
-        mapper = {
-            "Elma (Apple)": "apple_uzman_model.keras",
-            "Domates (Tomato)": "tomato_uzman_model.keras",
-            "Mısır (Corn)": "corn_uzman_model.keras",
-            "Üzüm (Grape)": "grape_uzman_model.keras",
-            "Şeftali (Peach)": "peach_uzman_model.keras",
-            "Biber (Pepper)": "pepper_uzman_model.keras",
-            "Patates (Potato)": "potato_uzman_model.keras",
-            "Çilek (Strawberry)": "strawberry_uzman_model.keras",
-            "Kiraz (Cherry)": "cherry_uzman_model.keras",
-            "Yaban Mersini": "blueberry_uzman_model.keras",
-            "Ahududu": "raspberry_uzman_model.keras",
-            "Soya Fasulyesi": "soybean_uzman_model.keras",
-            "Kabak": "squash_uzman_model.keras",
-            "Portakal": "orange_uzman_model.keras"
-        }
-        if bitki_tipi in mapper:
-            try: return tf.keras.models.load_model(mapper[bitki_tipi])
-            except: return None
-        return None
-
-    def siniflari_getir(bitki_tipi):
-        if bitki_tipi == "Elma (Apple)": return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
-        elif bitki_tipi == "Domates (Tomato)": return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
-        elif bitki_tipi == "Mısır (Corn)": return ['Mısır Gri Yaprak Lekesi', 'Mısır Yaygın Pas', 'Mısır Kuzey Yaprak Yanıklığı', 'Mısır Sağlıklı']
-        elif bitki_tipi == "Patates (Potato)": return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
-        elif bitki_tipi == "Üzüm (Grape)": return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
-        return ["Hastalık", "Sağlıklı"]
-
-    def tr_duzelt(text):
-        source = "şŞıİğĞüÜöÖçÇ"
-        target = "sSiIgGuUoOcC"
-        translation_table = str.maketrans(source, target)
-        return text.translate(translation_table)
-
-    def rapor_olustur(bitki, hastalik, recete):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", 'B', 16)
-        pdf.cell(200, 10, txt="ZIRAAT AI - TESHIS RAPORU", ln=1, align='C')
-        pdf.ln(10)
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, txt=tr_duzelt(f"Tarih: {time.strftime('%d-%m-%Y')}"), ln=1)
-        pdf.cell(200, 10, txt=tr_duzelt(f"Analiz Edilen Bitki: {bitki}"), ln=1)
-        pdf.cell(200, 10, txt=tr_duzelt(f"Tespit Edilen Durum: {hastalik}"), ln=1)
-        pdf.ln(10)
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(200, 10, txt="YAPAY ZEKA ONERISI VE RECETE:", ln=1)
-        pdf.set_font("Arial", size=11)
-        pdf.multi_cell(0, 10, txt=tr_duzelt(recete))
-        pdf.ln(20)
-        pdf.set_font("Arial", 'I', 8)
-        pdf.cell(0, 10, txt="Bu rapor yapay zeka tarafindan uretilmistir. Kesin teshis icin uzmana danisiniz.", align='C')
-        return pdf.output(dest='S').encode('latin-1', 'ignore')
-
-    if 'soru_sayaci' not in st.session_state: st.session_state['soru_sayaci'] = 0
-    if 'son_soru_zamani' not in st.session_state: st.session_state['son_soru_zamani'] = 0
-    if 'rapor_hazir' not in st.session_state: st.session_state['rapor_hazir'] = None
-
-    col_secim, col_yukle = st.columns(2)
-    with col_secim:
-        secilen_bitki = st.selectbox("Bitki Seçin", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
-    with col_yukle:
-        yuklenen_dosya = st.file_uploader("Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
-
-    if yuklenen_dosya:
-        image = Image.open(yuklenen_dosya)
-        st.image(image, caption='Yüklenen Fotoğraf', width=300)
-        
-        if st.button("🔍 Analiz Et ve Raporla", type="primary"):
-            with st.spinner('Yapay zeka yaprağı inceliyor...'):
-                model = model_yukle(secilen_bitki)
-                if model:
-                    hedef_boyut = (160, 160)
-                    img = image.resize(hedef_boyut) 
-                    img_array = np.array(img).astype("float32")
-                    if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
-                    elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
-                    img_array = img_array[..., ::-1] 
-                    input_data = np.expand_dims(img_array, axis=0)
-                    
+    def gemini_baglan():
+        try:
+            if "GOOGLE_API_KEY" in st.secrets:
+                api_key = st.secrets["GOOGLE_API_KEY"]
+                genai.configure(api_key=api_key)
+                oncelikli = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+                for m in oncelikli:
                     try:
-                        tahmin = model.predict(input_data)
-                        olasiliklar = tf.nn.softmax(tahmin).numpy()[0]
-                        indeks = np.argmax(olasiliklar)
-                        guven = olasiliklar[indeks] * 100
-                        siniflar = siniflari_getir(secilen_bitki)
+                        test = genai.GenerativeModel(m)
+                        test.generate_content("Check") 
+                        return test, m 
+                    except: continue
+                return None, "Model Yok"
+            return None, "Anahtar Yok"
+        except Exception as e: return None, str(e)
+
+    model_gemini, aktif_model_ismi = gemini_baglan()
+    
+    # --- YAN MENÜ ---
+    with st.sidebar:
+        st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
+        st.title("Ziraat AI")
+        st.caption(f"Aktif Model: {aktif_model_ismi}")
+        
+        if st.button("🔙 Çıkış Yap / Başa Dön"):
+            st.session_state['giris_yapildi'] = False
+            st.rerun()
+
+    # --- ANA BAŞLIK ---
+    st.title("🌿 Akıllı Bitki Doktoru")
+
+    # --- SEKMELER ---
+    tab1, tab2, tab3 = st.tabs(["🌿 Teşhis", "🌤️ Bölge", "ℹ️ Yardım"])
+
+    # --- SEKME 1: TEŞHİS ---
+    with tab1:
+        st.markdown("### 📸 Fotoğraf Yükle")
+        
+        # Model Yükleyici
+        @st.cache_resource
+        def model_yukle(bitki):
+            mapper = {
+                "Elma (Apple)": "apple_uzman_model.keras",
+                "Domates (Tomato)": "tomato_uzman_model.keras",
+                "Mısır (Corn)": "corn_uzman_model.keras",
+                "Üzüm (Grape)": "grape_uzman_model.keras",
+                "Patates (Potato)": "potato_uzman_model.keras",
+                "Biber (Pepper)": "pepper_uzman_model.keras",
+                "Şeftali (Peach)": "peach_uzman_model.keras",
+                "Çilek (Strawberry)": "strawberry_uzman_model.keras",
+                "Kiraz (Cherry)": "cherry_uzman_model.keras"
+            }
+            if bitki in mapper:
+                try: return tf.keras.models.load_model(mapper[bitki])
+                except: return None
+            return None
+        
+        def siniflari_al(bitki):
+             # Basitleştirilmiş sınıf listesi (Örnek)
+             if bitki == "Elma (Apple)": return ['Kara Leke', 'Kara Çürüklük', 'Pas', 'Sağlıklı']
+             return ["Hastalık", "Sağlıklı"]
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            secilen_bitki = st.selectbox("Bitki:", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)"])
+        with col_b:
+            dosya = st.file_uploader("Resim:", type=["jpg","png"])
+
+        if dosya:
+            image = Image.open(dosya)
+            st.image(image, width=300)
+            if st.button("🔍 Analiz Et", type="primary"):
+                with st.spinner("İnceleniyor..."):
+                    model = model_yukle(secilen_bitki)
+                    if model:
+                        img = image.resize((160,160))
+                        img_arr = np.array(img).astype("float32")
+                        if img_arr.ndim==2: img_arr=np.stack((img_arr,)*3, axis=-1)
+                        elif img_arr.shape[-1]==4: img_arr=img_arr[:,:,:3]
+                        img_arr = img_arr[...,::-1] # BGR
+                        input_data = np.expand_dims(img_arr, axis=0)
                         
-                        if indeks < len(siniflar):
-                            sonuc_ismi = siniflar[indeks]
-                            recete_metni = "Hastalık sağlıklı olduğu için tedavi gerekmez."
-                            if "Sağlıklı" in sonuc_ismi:
-                                st.success(f"**Teşhis:** {sonuc_ismi}")
+                        try:
+                            tahmin = model.predict(input_data)
+                            idx = np.argmax(tahmin)
+                            sonuc = siniflari_al(secilen_bitki)[idx] if idx < 4 else "Bilinmeyen"
+                            
+                            if "Sağlıklı" in sonuc:
+                                st.success(f"**Durum:** {sonuc}")
                                 st.balloons()
                             else:
-                                st.error(f"**Teşhis:** {sonuc_ismi}")
+                                st.error(f"**Durum:** {sonuc}")
+                                # Gemini Reçete
                                 if model_gemini:
-                                    prompt_rapor = f"Bitki: {secilen_bitki}. Hastalık: {sonuc_ismi}. Bu hastalık için çiftçiye uygulanabilir, maddeler halinde kısa bir tedavi reçetesi ve ilaç önerisi yaz. Türkçe karakter kullanma (ornek: ş yerine s yaz)."
-                                    try:
-                                        response = model_gemini.generate_content(prompt_rapor)
-                                        recete_metni = response.text
-                                    except: recete_metni = "Yapay zeka reçete oluştururken bir hata oluştu."
-
-                            st.info(f"**Güven Oranı:** %{guven:.2f}")
-                            pdf_data = rapor_olustur(secilen_bitki, sonuc_ismi, recete_metni)
-                            st.session_state['rapor_hazir'] = pdf_data
-                            st.session_state['son_teshis'] = sonuc_ismi
+                                    res = model_gemini.generate_content(f"{secilen_bitki} bitkisinde {sonuc} hastalığı için kısa tedavi önerisi yaz.")
+                                    st.info(res.text)
+                                    
+                            st.session_state['son_teshis'] = sonuc
                             st.session_state['son_bitki'] = secilen_bitki
-                        else: st.error("Liste hatası.")
-                    except Exception as e: st.error(f"Tahmin hatası: {e}")
+                        except: st.error("Hata oluştu.")
 
-        if st.session_state['rapor_hazir']:
-            st.download_button(label="📄 PDF Raporunu İndir", data=st.session_state['rapor_hazir'], file_name="ziraat_ai_rapor.pdf", mime="application/pdf", type="secondary")
-
-    if 'son_teshis' in st.session_state and model_gemini:
-        st.markdown("---")
-        st.subheader(f"💬 Asistana Sor")
-        soru = st.text_input("Bu teşhisle ilgili sorun var mı?", placeholder="Örn: Hangi ilacı kullanmalıyım?")
-        if st.button("Soruyu Gönder"):
-             if soru:
-                with st.spinner('Cevaplanıyor...'):
-                    prompt = f"Sen uzman bir ziraat mühendisisin. Bitki: {st.session_state['son_bitki']}. Hastalık: {st.session_state['son_teshis']}. Soru: '{soru}'. Kısa cevap ver."
-                    try:
-                        cevap = model_gemini.generate_content(prompt)
-                        st.write(cevap.text)
-                    except Exception as e: st.error(f"Hata: {e}")
-
-# --- SEKME 2: BÖLGESEL VERİLER ---
-with tab2:
-    st.header("📍 Bölgesel Tarım Verileri")
-    col_sehir, col_btn = st.columns([3, 1])
-    with col_sehir:
-        sehir_secimi = st.text_input("Şehir Giriniz:", value="Konya")
-    with col_btn:
-        st.write("") 
-        st.write("") 
-        btn_getir = st.button("Verileri Getir")
-
-    if btn_getir or 'sehir_cache' in st.session_state:
-        st.session_state['sehir_cache'] = sehir_secimi 
-        
-        def hava_durumu_getir(sehir):
-            try:
-                geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1&language=tr&format=json"
-                geo_response = requests.get(geo_url).json()
-                if "results" in geo_response:
-                    lat = geo_response["results"][0]["latitude"]
-                    lon = geo_response["results"][0]["longitude"]
-                    weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto"
-                    w_response = requests.get(weather_url).json()
-                    return w_response["current"]
-                return None
-            except: return None
-
-        veri = hava_durumu_getir(sehir_secimi)
-        if veri:
-            st.subheader(f"🌤️ {sehir_secimi.upper()} Hava Durumu")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Sıcaklık", f"{veri['temperature_2m']} °C")
-            m2.metric("Nem", f"%{veri['relative_humidity_2m']}")
-            m3.metric("Rüzgar", f"{veri['wind_speed_10m']} km/s")
+        # Sohbet
+        if 'son_teshis' in st.session_state and model_gemini:
             st.markdown("---")
-            st.subheader("📅 Bu Ay Ne Yapılmalı?")
-            if model_gemini:
-                aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
-                simdiki_ay = aylar[int(time.strftime("%m")) - 1]
-                with st.spinner("Ziraat mühendisi takvimi hazırlıyor..."):
-                    prompt_takvim = f"""
-                    Şu an {simdiki_ay} ayındayız ve Türkiye'nin {sehir_secimi} bölgesindeyiz. 
-                    Bu mevsimde ve bu bölgede çiftçiler genel olarak hangi tarımsal işlemleri yapmalıdır?
-                    Lütfen 3-4 maddede, çok kısa ve öz, çiftçi dostu bir dille özetle.
-                    """
-                    try:
-                        oneri = model_gemini.generate_content(prompt_takvim)
-                        st.success(oneri.text)
-                    except: st.error("Takvim verisi alınamadı.")
+            soru = st.text_input("Asistana sor:")
+            if st.button("Sor"):
+                res = model_gemini.generate_content(f"Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}, Soru: {soru}")
+                st.write(res.text)
 
-# --- SEKME 3: NASIL KULLANILIR? (SİYAH YAZI - BEYAZ KUTU) ---
-with tab3:
-    st.markdown("""
-    <div style="background-color: rgba(255, 255, 255, 0.9); padding: 25px; border-radius: 15px; border-left: 5px solid #4CAF50; color: black;">
-        <h2 style="color: #1b5e20; margin-top: 0;">❓ Nasıl Kullanılır?</h2>
-        <p style="font-size: 16px;">
-            <b>Adım 1:</b> Yukarıdaki <code>🌿 Teşhis & Rapor</code> sekmesine tıklayın.<br><br>
-            <b>Adım 2:</b> Listeden bitkinizin türünü seçin (Örn: Elma, Domates).<br><br>
-            <b>Adım 3:</b> Yaprağın fotoğrafını yükleyin. <i style="color: #d32f2f;">(Yakından ve net çekimler daha iyi sonuç verir.)</i><br><br>
-            <b>Adım 4:</b> <b>"Analiz Et"</b> butonuna basın. Yapay zeka hastalığı bulacak ve size otomatik reçete yazacaktır.<br><br>
-            <hr>
-            <b>Ekstra:</b> <code>🌤️ Bölgesel Veriler</code> sekmesinden şehrinizin hava durumuna ve yapay zeka destekli tarım takvimine bakabilirsiniz.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    # --- SEKME 2: BÖLGE ---
+    with tab2:
+        st.header("🌤️ Bölgesel Veriler")
+        sehir = st.text_input("Şehir:", value="Antalya")
+        if st.button("Getir"):
+             try:
+                geo = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1").json()
+                lat = geo["results"][0]["latitude"]
+                lon = geo["results"][0]["longitude"]
+                w = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,wind_speed_10m").json()["current"]
+                
+                c1, c2 = st.columns(2)
+                c1.metric("Sıcaklık", f"{w['temperature_2m']} °C")
+                c2.metric("Rüzgar", f"{w['wind_speed_10m']} km/s")
+                
+                # Takvim
+                if model_gemini:
+                    takvim = model_gemini.generate_content(f"Şu an {time.strftime('%B')} ayındayız, yer {sehir}. Çiftçiler ne yapmalı? Kısa özet.")
+                    st.success(takvim.text)
+             except: st.error("Veri alınamadı.")
+
+    # --- SEKME 3: YARDIM (BEYAZ KUTULU) ---
+    with tab3:
+        st.markdown("""
+        <div style="background-color: rgba(255, 255, 255, 0.9); padding: 25px; border-radius: 15px; border-left: 5px solid #4CAF50; color: black;">
+            <h2 style="color: #1b5e20; margin-top: 0;">❓ Nasıl Kullanılır?</h2>
+            <p style="font-size: 16px;">
+                <b>Adım 1:</b> <code>Teşhis</code> sekmesinden bitkiyi seçin.<br>
+                <b>Adım 2:</b> Fotoğraf yükleyin.<br>
+                <b>Adım 3:</b> <b>"Analiz Et"</b> butonuna basın.<br>
+                <hr>
+                <b>Not:</b> Çıkış yapmak için soldaki menüyü kullanabilirsiniz.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
