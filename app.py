@@ -84,7 +84,7 @@ def create_pdf(bitki, hastalik, recete):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 2. GEMINI BAĞLANTISI (HATA AYIKLAMALI) 🛠️
+# 2. GEMINI BAĞLANTISI (GARANTİ MODEL MODU) 🛠️
 # ==============================================================================
 @st.cache_resource
 def gemini_baglan():
@@ -93,20 +93,23 @@ def gemini_baglan():
             api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
             
-            # Öncelikle en yeni ve hızlı modeli dene
-            try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                model.generate_content("Test") # Test isteği
-                return model, "gemini-1.5-flash (Aktif)"
-            except Exception as e:
-                # Eğer yeni model çalışmazsa, eskiyi dene (Fallback)
+            # SIRALAMAYI DEĞİŞTİRDİK: Önce 'gemini-pro' (En Garanti Olan)
+            # Bu model eski kütüphanelerde bile %100 çalışır.
+            modelleri_dene = [
+                'gemini-pro',          # 1. ÖNCELİK (Garanti)
+                'gemini-1.5-flash',    # 2. Öncelik (Varsa)
+                'gemini-1.5-pro'       # 3. Öncelik
+            ]
+            
+            for m in modelleri_dene:
                 try:
-                    model = genai.GenerativeModel('gemini-pro')
-                    model.generate_content("Test")
-                    return model, "gemini-pro (Yedek)"
+                    test_model = genai.GenerativeModel(m)
+                    test_model.generate_content("Test")
+                    return test_model, m # Çalışan modeli döndür
                 except:
-                    # O da çalışmazsa detaylı hatayı döndür
-                    return None, f"Hata: {str(e)}"
+                    continue 
+
+            return None, "Hiçbir model çalışmadı. API Kotanızı kontrol edin."
             
         return None, "API Anahtarı Yok"
     except Exception as e: return None, str(e)
@@ -138,22 +141,20 @@ else:
         st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
         st.title("Ziraat AI")
         
-        # --- VERSİYON KONTROLÜ ---
-        st.caption(f"Kütüphane Sürümü: {genai.__version__}")
-        # -------------------------
+        # DEBUG BİLGİSİ
+        st.caption(f"Kütüphane: {genai.__version__}")
         
         if model_gemini:
-            st.success(f"Bağlı: {aktif_model_ismi}")
+            st.success(f"Model: {aktif_model_ismi}")
         else:
             st.error(f"⚠️ {aktif_model_ismi}")
-            st.info("Eğer 'Not Found' hatası alıyorsanız kütüphane eskidir. Lütfen 'Reboot App' yapın.")
 
         if st.button("🔙 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
     st.title("🌿 Akıllı Bitki Doktoru")
-    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi & Reçete", "🌤️ Bölgesel Veriler ve Takvim", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi & Reçete", "🌤️ Bölgesel Hava Durumu ve Takvim", "ℹ️ Yardım"])
 
     # --- SEKME 1: TEŞHİS & REÇETE ---
     with tab1:
