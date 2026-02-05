@@ -5,35 +5,59 @@ from PIL import Image, ImageOps
 import google.generativeai as genai
 import time
 from fpdf import FPDF
+import base64 # Resim okumak için gerekli
+import os
 
 # ==============================================================================
 # 1. AYARLAR VE GÖRSEL TASARIM 🎨
 # ==============================================================================
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿", layout="centered")
 
-# --- ARKA PLAN RESMİ EKLEME FONKSİYONU ---
-def arka_plani_ayarla(image_url):
-    st.markdown(
-        f"""
+# --- ARKA PLAN RESMİ EKLEME (YEREL DOSYADAN) ---
+def arka_plani_ayarla():
+    # Önce yerel dosyayı (GitHub'daki dosyayı) dene
+    dosya_adi = "arkaplan.jpg"
+    
+    if os.path.exists(dosya_adi):
+        with open(dosya_adi, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        
+        css_kodu = f"""
         <style>
         .stApp {{
-            background-image: url("{image_url}");
+            background-image: url("data:image/jpg;base64,{encoded_string}");
             background-attachment: fixed;
             background-size: cover;
         }}
-        /* Yazıların daha net okunması için kutucukların arka planını yarı saydam yapalım */
         div[data-testid="stExpander"] {{
             background-color: rgba(0, 0, 0, 0.6);
             color: white;
         }}
         </style>
-        """,
-        unsafe_allow_html=True
-    )
+        """
+        st.markdown(css_kodu, unsafe_allow_html=True)
+    else:
+        # Dosya yoksa internetten yedek resim çek (Uygulama çökmesin diye)
+        yedek_url = "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop"
+        st.markdown(
+            f"""
+            <style>
+            .stApp {{
+                background-image: url("{yedek_url}");
+                background-attachment: fixed;
+                background-size: cover;
+            }}
+            div[data-testid="stExpander"] {{
+                background-color: rgba(0, 0, 0, 0.6);
+                color: white;
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
 
-# Buraya istediğin resmin linkini koyabilirsin. 
-# Şimdilik senin için şık bir 'Koyu Yeşil Yaprak' teması seçtim.
-arka_plani_ayarla("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop")
+# Fonksiyonu çalıştır
+arka_plani_ayarla()
 
 # KOTA AYARLARI
 SORU_LIMITI = 20        
