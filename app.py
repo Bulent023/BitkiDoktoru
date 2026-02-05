@@ -3,56 +3,66 @@ import tensorflow as tf
 import numpy as np
 from PIL import Image, ImageOps
 import google.generativeai as genai
+import time
 
 # ==============================================================================
-# 1. AYARLAR VE OTOMATİK MODEL SEÇİCİ (AUTO-DISCOVERY) 🤖
+# 1. AYARLAR
 # ==============================================================================
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
-chatbot_aktif = False
-aktif_model_ismi = "Bulunamadı"
-
-try:
-    # 1. Anahtarı Kasa'dan Al
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-        genai.configure(api_key=api_key)
-        
-        # 2. OTOMATİK MODEL SEÇME DÖNGÜSÜ (Senin hatırladığın kısım)
-        # Google'a soruyoruz: "Elinizde hangi modeller var?"
-        uygun_modeller = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                uygun_modeller.append(m.name)
-        
-        # Eğer uygun model varsa ilkini seç
-        if uygun_modeller:
-            # Öncelik 'gemini' içerenlerde olsun
-            secilen_model = next((m for m in uygun_modeller if 'gemini' in m), uygun_modeller[0])
-            
-            model_gemini = genai.GenerativeModel(secilen_model)
-            aktif_model_ismi = secilen_model
-            
-            # Test atışı
-            model_gemini.generate_content("Test")
-            chatbot_aktif = True
-        else:
-            st.error("🚨 API Anahtarı geçerli ama erişilebilir model bulunamadı.")
-            
-    else:
-        st.error("🚨 Kasa Hatası: Secrets içinde GOOGLE_API_KEY yok.")
-
-except Exception as e:
-    st.warning(f"⚠️ Sohbet başlatılamadı (Hata: {e})")
-    chatbot_aktif = False
+# KOTA AYARLARI
+SORU_LIMITI = 20        # Kullanıcı başına günlük soru hakkı
+BEKLEME_SURESI = 15     # Spam koruması (saniye)
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
-if chatbot_aktif:
-    st.caption(f"✅ Bağlı Model: `{aktif_model_ismi}`") # Hangi modeli bulduğunu ekrana yazar
+
+# ==============================================================================
+# 2. GEMINI BAĞLANTISI (YASAKLI MODELLER ENGELLENDİ) 🛡️
+# ==============================================================================
+@st.cache_resource
+def gemini_baglan():
+    try:
+        if "GOOGLE_API_KEY" in st.secrets:
+            api_key = st.secrets["GOOGLE_API_KEY"]
+            genai.configure(api_key=api_key)
+            
+            # SADECE BU MODELLERİ KULLAN (Diğerleri yasak)
+            # 2.5-flash gibi düşük kotalı modelleri listeye almıyoruz.
+            izin_verilen_modeller = [
+                'gemini-1.5-flash',          # ÖNCELİK 1: En yüksek kota (1500/gün)
+                'gemini-1.5-flash-latest',   # ÖNCELİK 2: Alternatif sürüm
+                'gemini-1.5-pro',            # ÖNCELİK 3: Pro sürüm
+                'gemini-1.0-pro'             # ÖNCELİK 4: Eski ama sağlam sürüm
+            ]
+            
+            # Sadece listedekileri dene. Bulamazsan hata ver (Düşük kotalıya gitme).
+            for m in izin_verilen_modeller:
+                try:
+                    test_model = genai.GenerativeModel(m)
+                    test_model.generate_content("System check") 
+                    return test_model, m # Çalışan modeli ve ismini döndür
+                except:
+                    continue
+            
+            return None, "Uygun Model Bulunamadı"
+                    
+        return None, "Anahtar Yok"
+    except Exception as e:
+        return None, str(e)
+
+# Bağlantıyı Başlat
+model_gemini, aktif_model_ismi = gemini_baglan()
+
+# Durum Bildirimi
+if model_gemini:
+    st.caption(f"✅ Yapay Zeka Hazır: `{aktif_model_ismi}` (Yüksek Kota)")
+else:
+    st.error("⚠️ Yapay Zeka Bağlantı Hatası: Yüksek kotalı modellerden hiçbirine erişilemedi.")
+
 st.markdown("---")
 
 # ==============================================================================
-# 2. MODEL YÜKLEME
+# 3. TEŞHİS MODELİ YÜKLEME
 # ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
@@ -79,9 +89,6 @@ def model_yukle(bitki_tipi):
             return None
     return None
 
-# ==============================================================================
-# 3. SINIF LİSTESİ (2=PAS, 0=LEKE) ✅
-# ==============================================================================
 def siniflari_getir(bitki_tipi):
     if bitki_tipi == "Elma (Apple)":
         return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
@@ -96,7 +103,16 @@ def siniflari_getir(bitki_tipi):
     return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
-# 4. ARAYÜZ VE ANALİZ
+# 4. KULLANICI OTURUM TAKİBİ
+# ==============================================================================
+if 'soru_sayaci' not in st.session_state:
+    st.session_state['soru_sayaci'] = 0
+
+if 'son_soru_zamani' not in st.session_state:
+    st.session_state['son_soru_zamani'] = 0
+
+# ==============================================================================
+# 5. ARAYÜZ VE ANALİZ
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -109,31 +125,22 @@ if yuklenen_dosya:
         with st.spinner('Yapay zeka analiz ediyor...'):
             model = model_yukle(secilen_bitki)
             if model:
-                # 1. BOYUT: 160x160
                 hedef_boyut = (160, 160)
                 img = image.resize(hedef_boyut) 
-                
-                # Array'e çevir
                 img_array = np.array(img).astype("float32")
-                
-                # Kanal temizliği
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
 
-                # RENK DÜZELTME (BGR DÖNÜŞÜMÜ - PAS HASTALIĞI İÇİN ŞART)
+                # BGR DÖNÜŞÜMÜ
                 img_array = img_array[..., ::-1] 
 
-                # NORMALİZASYON YOK (0-255 Ham Veri)
                 input_data = np.expand_dims(img_array, axis=0)
                 
-                # TAHMİN
                 try:
                     tahmin = model.predict(input_data)
                     olasiliklar = tf.nn.softmax(tahmin).numpy()[0]
-                    
                     indeks = np.argmax(olasiliklar)
                     guven = olasiliklar[indeks] * 100
-                    
                     siniflar = siniflari_getir(secilen_bitki)
                     
                     if indeks < len(siniflar):
@@ -145,7 +152,6 @@ if yuklenen_dosya:
                             st.error(f"**Teşhis:** {sonuc_ismi}")
                         
                         st.info(f"**Güven Oranı:** %{guven:.2f}")
-                        
                         st.session_state['son_teshis'] = sonuc_ismi
                         st.session_state['son_bitki'] = secilen_bitki
                     else:
@@ -154,23 +160,37 @@ if yuklenen_dosya:
                     st.error(f"Tahmin hatası: {e}")
 
 # ==============================================================================
-# 5. SOHBET MODU
+# 6. SOHBET MODU
 # ==============================================================================
-if 'son_teshis' in st.session_state and chatbot_aktif:
+if 'son_teshis' in st.session_state and model_gemini:
     st.markdown("---")
     st.subheader(f"🤖 Ziraat Asistanı ile Konuşun")
+    
+    kalan_hak = SORU_LIMITI - st.session_state['soru_sayaci']
+    st.progress(st.session_state['soru_sayaci'] / SORU_LIMITI, text=f"Günlük Soru Hakkı: {kalan_hak} kaldı")
+    
     st.write(f"**Durum:** {st.session_state['son_bitki']} - {st.session_state['son_teshis']}")
     
     soru = st.text_input("Sorunuzu buraya yazın...")
     
     if st.button("Soruyu Gönder"):
-        if soru:
+        if st.session_state['soru_sayaci'] >= SORU_LIMITI:
+            st.error("🚫 Bu oturumdaki soru limitiniz doldu! Yarın tekrar bekleriz.")
+        
+        elif (time.time() - st.session_state['son_soru_zamani']) < BEKLEME_SURESI:
+            kalan_sure = int(BEKLEME_SURESI - (time.time() - st.session_state['son_soru_zamani']))
+            st.warning(f"⏳ Biraz yavaşlayalım! Lütfen {kalan_sure} saniye daha bekle.")
+            
+        elif soru:
             with st.spinner('Cevaplanıyor...'):
                 prompt = f"Sen uzman bir ziraat mühendisisin. Kullanıcının bitkisi: {st.session_state['son_bitki']}. Teşhis edilen hastalık: {st.session_state['son_teshis']}. Kullanıcı sorusu: '{soru}'. Bu soruya kısa, öz ve çiftçi dostu bir dille cevap ver. Tedavi yöntemlerinden bahset."
                 try:
                     cevap = model_gemini.generate_content(prompt)
                     st.write(cevap.text)
+                    st.session_state['soru_sayaci'] += 1
+                    st.session_state['son_soru_zamani'] = time.time()
                 except Exception as e:
                     st.error(f"Hata: {e}")
-elif 'son_teshis' in st.session_state and not chatbot_aktif:
-     st.warning("Chatbot şu an aktif değil.")
+                    
+elif 'son_teshis' in st.session_state and not model_gemini:
+     st.warning("⚠️ Sohbet sistemi şu an mola verdi (Kota Limiti).")
