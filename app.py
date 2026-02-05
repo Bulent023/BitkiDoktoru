@@ -18,7 +18,6 @@ if 'giris_yapildi' not in st.session_state: st.session_state['giris_yapildi'] = 
 if 'son_teshis' not in st.session_state: st.session_state['son_teshis'] = None
 if 'son_bitki' not in st.session_state: st.session_state['son_bitki'] = None
 if 'recete_hafizasi' not in st.session_state: st.session_state['recete_hafizasi'] = ""
-if 'aktif_model_ismi' not in st.session_state: st.session_state['aktif_model_ismi'] = None # Seçilen model burada saklanacak
 
 # --- CSS TASARIMI ---
 def tasariimi_uygula():
@@ -38,13 +37,16 @@ def tasariimi_uygula():
             background-color: #ff4b4b; color: white; border: 2px solid white;
             box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
         }}
+        div.stButton > button:hover {{ border-color: #ff4b4b; color: #ff4b4b; background-color: white; }}
         section[data-testid="stSidebar"] {{ background-color: rgba(15, 25, 15, 0.95) !important; border-right: 3px solid #4CAF50; }}
-        * {{ color: white; }}
+        section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, p, label {{ color: white !important; }}
         input[type="text"] {{ color: white !important; }}
         div[data-baseweb="input"] {{ background-color: rgba(20, 40, 20, 0.8) !important; border: 1px solid #4CAF50; }}
-        div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.8); border-radius: 10px; }}
-        div[data-testid="stTabs"] button[aria-selected="true"] {{ background-color: #4CAF50; }}
-        div.stInfo, div.stSuccess, div.stError {{ background-color: rgba(0, 0, 0, 0.8) !important; color: white !important; }}
+        div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.8); color: white; border-radius: 10px; }}
+        div[data-testid="stTabs"] button[aria-selected="true"] {{ background-color: #4CAF50; color: white; }}
+        div.stInfo {{ background-color: rgba(0, 0, 0, 0.7) !important; color: white !important; border: 1px solid #2196F3; }}
+        div.stSuccess {{ background-color: rgba(0, 50, 0, 0.7) !important; color: white !important; }}
+        div.stError {{ background-color: rgba(50, 0, 0, 0.8) !important; color: white !important; }}
         </style>
         """, unsafe_allow_html=True
     )
@@ -78,83 +80,57 @@ def create_pdf(bitki, hastalik, recete):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 2. AKILLI MODEL SEÇİCİ VE BAĞLANTI (OTO PİLOT) 🧠
+# 2. MANUEL GEMINI BAĞLANTISI (KOTA DOSTU MOD) 🛠️
 # ==============================================================================
-def en_iyi_modeli_bul(api_key):
-    """API'deki tüm modelleri tarar ve en uygun olanı seçer."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            tum_modeller = response.json().get('models', [])
-            
-            # Tercih Sıralaması (En iyiden eskiye)
-            tercihler = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro']
-            
-            # 1. Adım: Tercih listesindekilerden biri var mı diye bak
-            for tercih in tercihler:
-                for m in tum_modeller:
-                    # Model isminin içinde tercih geçiyorsa VE metin üretebiliyorsa
-                    if tercih in m['name'] and 'generateContent' in m['supportedGenerationMethods']:
-                        return m['name'] # Örn: models/gemini-1.5-flash-001
-            
-            # 2. Adım: Tercihler yoksa, 'generateContent' yapabilen HERHANGİ bir gemini modelini al
-            for m in tum_modeller:
-                if 'gemini' in m['name'] and 'generateContent' in m['supportedGenerationMethods']:
-                    return m['name']
-                    
-        return "models/gemini-pro" # Hiçbir şey bulamazsa varsayılanı dene
-    except:
-        return "models/gemini-pro"
-
 def gemini_sor(prompt):
     if "GOOGLE_API_KEY" not in st.secrets:
         return "HATA: API Anahtarı bulunamadı."
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # --- MODEL SEÇİMİ (BİR KERE YAPILIR VE KAYDEDİLİR) ---
-    if st.session_state['aktif_model_ismi'] is None:
-        bulunan_model = en_iyi_modeli_bul(api_key)
-        st.session_state['aktif_model_ismi'] = bulunan_model
-    
-    secilen_model = st.session_state['aktif_model_ismi']
-    # -----------------------------------------------------
-
-    # Doğrudan URL oluştur (Model ismini otomatik bulduk)
-    # Eğer model ismi 'models/' ile başlamıyorsa ekle (API formatı gereği)
-    if not secilen_model.startswith("models/"):
-        secilen_model = f"models/{secilen_model}"
-        
-    url = f"https://generativelanguage.googleapis.com/v1beta/{secilen_model}:generateContent?key={api_key}"
+    # LİSTE: Sadece ÜCRETSİZ planda çalışan modeller
+    # Sırasıyla dener: 1.5 Flash (En hızlı/bol kotalı) -> 1.5 Pro -> 1.0 Pro
+    ucretsiz_modeller = [
+        "gemini-1.5-flash", 
+        "gemini-1.5-pro", 
+        "gemini-pro"
+    ]
     
     headers = {'Content-Type': 'application/json'}
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
-        else:
-            # Eğer 404 verirse demek ki o model o an çalışmadı, hafızayı silip tekrar aratalım
-            if response.status_code == 404:
-                st.session_state['aktif_model_ismi'] = None 
-                return "Model anlık hata verdi, lütfen tekrar butona basın (Yeni model aranacak)."
-            return f"Hata Kodu: {response.status_code} - Mesaj: {response.text}"
-    except Exception as e:
-        return f"Bağlantı Hatası: {str(e)}"
+    data = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    for model_ismi in ucretsiz_modeller:
+        # v1beta API'sine istek atıyoruz
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_ismi}:generateContent?key={api_key}"
+        
+        try:
+            response = requests.post(url, headers=headers, json=data)
+            
+            # Eğer başarılıysa (200 OK), sonucu döndür ve döngüden çık
+            if response.status_code == 200:
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            
+            # Eğer 429 (Kota Dolu) veya 404 (Model Yok) ise bir sonraki modele geç
+            elif response.status_code in [429, 404, 503]:
+                continue # Sıradaki modeli dene
+            
+            else:
+                return f"Hata ({model_ismi}): {response.status_code} - {response.text}"
+                
+        except Exception as e:
+            continue # Hata olursa diğer modele geç
+
+    return "⚠️ Üzgünüz, tüm modellerin günlük kotası dolmuş olabilir. Lütfen yarın tekrar deneyin veya yeni bir API anahtarı alın."
+
 
 # ==============================================================================
 # 3. GİRİŞ EKRANI
 # ==============================================================================
 if not st.session_state['giris_yapildi']:
     st.write("")
-    st.markdown("<h1 style='text-align: center; font-size: 50px;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center;'>Çiftçinin Dijital Asistanı</h3>", unsafe_allow_html=True)
+    st.write("") 
+    st.markdown("<h1 style='text-align: center; color: white; font-size: 50px; text-shadow: 3px 3px 6px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #e8f5e9; text-shadow: 1px 1px 2px #000000;'>Çiftçinin Dijital Asistanı</h3>", unsafe_allow_html=True)
     
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
     if lottie_intro: st_lottie(lottie_intro, height=250, key="intro_anim")
@@ -171,15 +147,8 @@ else:
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
         st.title("Ziraat AI")
+        st.success("Mod: Kota Dostu (Flash/Pro)")
         
-        # OTOMATİK BULUNAN MODELİ GÖSTER
-        if st.session_state['aktif_model_ismi']:
-            # 'models/' kısmını silip sadece ismini gösterelim
-            temiz_isim = st.session_state['aktif_model_ismi'].replace("models/", "")
-            st.success(f"Aktif Zeka: {temiz_isim}")
-        else:
-            st.info("Yapay Zeka Aranıyor...")
-            
         if st.button("🔙 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
@@ -251,7 +220,7 @@ else:
                                 st.session_state['recete_hafizasi'] = "Bitki sağlıklı. Koruyucu önlem olarak düzenli bakım yapınız."
                             else:
                                 st.error(f"⚠️ **Tespit:** {sonuc}")
-                                # --- GEMINI REÇETE (OTOMATİK MODEL İLE) ---
+                                # --- GEMINI REÇETE ---
                                 prompt = f"Bitki: {secilen_bitki}, Hastalık: {sonuc}. Bu hastalık için 3 başlıkta bilgi ver: 1-Nedir, 2-Kültürel Önlem, 3-İlaçlı Mücadele."
                                 recete = gemini_sor(prompt)
                                 st.session_state['recete_hafizasi'] = recete
