@@ -5,19 +5,18 @@ from PIL import Image, ImageOps
 import google.generativeai as genai
 import time
 from fpdf import FPDF
-import base64 # Resim okumak için gerekli
+import base64 
 import os
+import requests # Hava durumu için
 
 # ==============================================================================
 # 1. AYARLAR VE GÖRSEL TASARIM 🎨
 # ==============================================================================
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿", layout="centered")
 
-# --- ARKA PLAN RESMİ EKLEME (YEREL DOSYADAN) ---
+# --- ARKA PLAN RESMİ EKLEME ---
 def arka_plani_ayarla():
-    # Önce yerel dosyayı (GitHub'daki dosyayı) dene
     dosya_adi = "arkaplan.jpg"
-    
     if os.path.exists(dosya_adi):
         with open(dosya_adi, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
@@ -33,11 +32,13 @@ def arka_plani_ayarla():
             background-color: rgba(0, 0, 0, 0.6);
             color: white;
         }}
+        section[data-testid="stSidebar"] {{
+            background-color: rgba(255, 255, 255, 0.9);
+        }}
         </style>
         """
         st.markdown(css_kodu, unsafe_allow_html=True)
     else:
-        # Dosya yoksa internetten yedek resim çek (Uygulama çökmesin diye)
         yedek_url = "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop"
         st.markdown(
             f"""
@@ -56,18 +57,66 @@ def arka_plani_ayarla():
             unsafe_allow_html=True
         )
 
-# Fonksiyonu çalıştır
 arka_plani_ayarla()
 
 # KOTA AYARLARI
 SORU_LIMITI = 20        
 BEKLEME_SURESI = 15     
 
+# ==============================================================================
+# 2. HAVA DURUMU MODÜLÜ (SIDEBAR) 🌤️
+# ==============================================================================
+def hava_durumu_getir(sehir):
+    try:
+        # 1. Şehrin koordinatlarını bul (Geocoding)
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1&language=tr&format=json"
+        geo_response = requests.get(geo_url).json()
+        
+        if "results" in geo_response:
+            lat = geo_response["results"][0]["latitude"]
+            lon = geo_response["results"][0]["longitude"]
+            
+            # 2. Hava durumunu çek
+            weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto"
+            w_response = requests.get(weather_url).json()
+            
+            return w_response["current"]
+        return None
+    except:
+        return None
+
+# Yan Menü (Sidebar) Oluşturma
+with st.sidebar:
+    st.header("🌤️ Tarımsal Hava Durumu")
+    sehir_secimi = st.text_input("Şehir veya İlçe Girin:", value="Ankara")
+    
+    if st.button("Hava Durumunu Gör"):
+        veri = hava_durumu_getir(sehir_secimi)
+        if veri:
+            st.success(f"📍 {sehir_secimi.upper()} İçin Veriler:")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Sıcaklık", f"{veri['temperature_2m']} °C")
+            with col2:
+                st.metric("Nem", f"%{veri['relative_humidity_2m']}")
+            st.metric("Rüzgar Hızı", f"{veri['wind_speed_10m']} km/s")
+            
+            # Ziraat Uyarısı
+            if veri['wind_speed_10m'] > 15:
+                st.warning("⚠️ Rüzgar sert! İlaçlama yaparken dikkatli olun.")
+            if veri['relative_humidity_2m'] > 80:
+                st.info("💧 Nem yüksek. Mantar hastalıklarına dikkat!")
+        else:
+            st.error("Şehir bulunamadı, lütfen doğru yazın.")
+            
+    st.markdown("---")
+    st.write("🌿 **Ziraat AI** © 2024")
+
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 st.markdown("**Yapay Zeka Destekli Hastalık Teşhisi ve Tedavi Uzmanı**")
 
 # ==============================================================================
-# 2. YARDIMCI FONKSİYONLAR (PDF İÇİN)
+# 3. YARDIMCI FONKSİYONLAR (PDF İÇİN)
 # ==============================================================================
 def tr_duzelt(text):
     source = "şŞıİğĞüÜöÖçÇ"
@@ -96,7 +145,7 @@ def rapor_olustur(bitki, hastalik, recete):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 3. GEMINI BAĞLANTISI
+# 4. GEMINI BAĞLANTISI
 # ==============================================================================
 @st.cache_resource
 def gemini_baglan():
@@ -136,7 +185,7 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 4. TEŞHİS MODELİ YÜKLEME
+# 5. TEŞHİS MODELİ YÜKLEME
 # ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
@@ -177,14 +226,14 @@ def siniflari_getir(bitki_tipi):
     return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
-# 5. KULLANICI OTURUM TAKİBİ
+# 6. KULLANICI OTURUM TAKİBİ
 # ==============================================================================
 if 'soru_sayaci' not in st.session_state: st.session_state['soru_sayaci'] = 0
 if 'son_soru_zamani' not in st.session_state: st.session_state['son_soru_zamani'] = 0
 if 'rapor_hazir' not in st.session_state: st.session_state['rapor_hazir'] = None
 
 # ==============================================================================
-# 6. ARAYÜZ VE ANALİZ
+# 7. ARAYÜZ VE ANALİZ
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -239,7 +288,7 @@ if yuklenen_dosya:
         st.download_button(label="📄 PDF Raporunu İndir", data=st.session_state['rapor_hazir'], file_name="ziraat_ai_rapor.pdf", mime="application/pdf", type="secondary")
 
 # ==============================================================================
-# 7. SOHBET MODU
+# 8. SOHBET MODU
 # ==============================================================================
 if 'son_teshis' in st.session_state and model_gemini:
     st.markdown("---")
