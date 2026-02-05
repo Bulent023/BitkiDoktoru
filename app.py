@@ -56,27 +56,51 @@ def load_lottieurl(url):
     try: return requests.get(url).json()
     except: return None
 
+# --- GÜÇLENDİRİLMİŞ KARAKTER TEMİZLEME FONKSİYONU ---
 def tr_duzelt(text):
+    if not isinstance(text, str):
+        text = str(text)
+        
+    # 1. Türkçe karakterleri İngilizce karşılıklarına çevir
     source = "şŞıİğĞüÜöÖçÇ"
     target = "sSiIgGuUoOcC"
     translation_table = str.maketrans(source, target)
-    return text.translate(translation_table)
+    text = text.translate(translation_table)
+    
+    # 2. Emojileri ve desteklenmeyen sembolleri sil (ZORUNLU)
+    # Bu satır metni 'latin-1' formatına sığdırır, sığmayanları (emoji vb.) siler.
+    text = text.encode('latin-1', 'ignore').decode('latin-1')
+    
+    return text
 
 def create_pdf(bitki, hastalik, recete):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Font Ekleme (Varsayılan Arial kullanılır)
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="ZIRAAT AI - TESHIS RAPORU", ln=1, align='C')
+    
+    # Başlık
+    pdf.cell(200, 10, txt=tr_duzelt("ZIRAAT AI - TESHIS RAPORU"), ln=1, align='C')
     pdf.ln(10)
+    
+    # Bilgiler
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, txt=tr_duzelt(f"Tarih: {time.strftime('%d-%m-%Y')}"), ln=1)
     pdf.cell(200, 10, txt=tr_duzelt(f"Bitki: {bitki}"), ln=1)
     pdf.cell(200, 10, txt=tr_duzelt(f"Teshis: {hastalik}"), ln=1)
+    
     pdf.ln(10)
+    
+    # Reçete Bölümü
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="DETAYLI BILGI VE RECETE:", ln=1)
+    pdf.cell(200, 10, txt=tr_duzelt("DETAYLI BILGI VE RECETE:"), ln=1)
+    
     pdf.set_font("Arial", size=11)
+    # Reçete metni çok uzun olabileceği için multi_cell kullanıyoruz
+    # ve tr_duzelt ile emojilerden arındırıyoruz
     pdf.multi_cell(0, 10, txt=tr_duzelt(recete))
+    
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
@@ -88,8 +112,6 @@ def gemini_sor(prompt):
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # LİSTE: Sadece ÜCRETSİZ planda çalışan modeller
-    # Sırasıyla dener: 1.5 Flash (En hızlı/bol kotalı) -> 1.5 Pro -> 1.0 Pro
     ucretsiz_modeller = [
         "gemini-1.5-flash", 
         "gemini-1.5-pro", 
@@ -100,28 +122,21 @@ def gemini_sor(prompt):
     data = {"contents": [{"parts": [{"text": prompt}]}]}
 
     for model_ismi in ucretsiz_modeller:
-        # v1beta API'sine istek atıyoruz
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_ismi}:generateContent?key={api_key}"
         
         try:
             response = requests.post(url, headers=headers, json=data)
             
-            # Eğer başarılıysa (200 OK), sonucu döndür ve döngüden çık
             if response.status_code == 200:
                 return response.json()['candidates'][0]['content']['parts'][0]['text']
-            
-            # Eğer 429 (Kota Dolu) veya 404 (Model Yok) ise bir sonraki modele geç
             elif response.status_code in [429, 404, 503]:
-                continue # Sıradaki modeli dene
-            
+                continue 
             else:
                 return f"Hata ({model_ismi}): {response.status_code} - {response.text}"
-                
         except Exception as e:
-            continue # Hata olursa diğer modele geç
+            continue
 
     return "⚠️ Üzgünüz, tüm modellerin günlük kotası dolmuş olabilir. Lütfen yarın tekrar deneyin veya yeni bir API anahtarı alın."
-
 
 # ==============================================================================
 # 3. GİRİŞ EKRANI
@@ -231,8 +246,12 @@ else:
                 with st.expander("📋 Reçete ve Tedavi (Tıkla)", expanded=True):
                     st.markdown(st.session_state['recete_hafizasi'])
                 
-                pdf_data = create_pdf(st.session_state['son_bitki'], st.session_state['son_teshis'], st.session_state['recete_hafizasi'])
-                st.download_button(label="📄 Raporu İndir (PDF)", data=pdf_data, file_name="rapor.pdf", mime="application/pdf")
+                # PDF Hatası için güvenli oluşturma
+                try:
+                    pdf_data = create_pdf(st.session_state['son_bitki'], st.session_state['son_teshis'], st.session_state['recete_hafizasi'])
+                    st.download_button(label="📄 Raporu İndir (PDF)", data=pdf_data, file_name="rapor.pdf", mime="application/pdf")
+                except Exception as e:
+                    st.warning("PDF oluşturulamadı (Karakter hatası). Lütfen ekran görüntüsü alınız.")
                 
                 st.markdown("---")
                 st.subheader("💬 Asistan")
