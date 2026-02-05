@@ -36,8 +36,6 @@ def tasariimi_uygula():
         f"""
         <style>
         .stApp {{ {bg_image_style} background-attachment: fixed; background-size: cover; }}
-        
-        /* MOBİL UYUMLU BUTON */
         div.stButton > button {{
             display: block !important; margin-left: auto !important; margin-right: auto !important;
             width: 70% !important; border-radius: 25px; font-weight: bold; font-size: 18px;
@@ -45,8 +43,6 @@ def tasariimi_uygula():
             border: 2px solid white; background-color: #ff4b4b; color: white;
         }}
         div.stButton > button:hover {{ border-color: #ff4b4b; color: #ff4b4b; background-color: white; }}
-        
-        /* DİĞER ELEMENTLER */
         section[data-testid="stSidebar"] {{ background-color: rgba(15, 25, 15, 0.95) !important; border-right: 3px solid #4CAF50; }}
         section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, p, label {{ color: white !important; }}
         input[type="text"] {{ color: white !important; }}
@@ -55,6 +51,7 @@ def tasariimi_uygula():
         div[data-testid="stTabs"] button[aria-selected="true"] {{ background-color: #4CAF50; color: white; }}
         div.stInfo {{ background-color: rgba(0, 0, 0, 0.7) !important; color: white !important; border: 1px solid #2196F3; }}
         div.stSuccess {{ background-color: rgba(0, 50, 0, 0.7) !important; color: white !important; }}
+        div.stError {{ background-color: rgba(50, 0, 0, 0.8) !important; color: white !important; }}
         </style>
         """, unsafe_allow_html=True
     )
@@ -124,13 +121,12 @@ else:
                         test.generate_content("Check") 
                         return test, m 
                     except: continue
-                return None, "Model Yok"
-            return None, "Anahtar Yok"
+                return None, "Hiçbir Model Yanıt Vermedi (Kota Dolu Olabilir)"
+            return None, "API Anahtarı Bulunamadı"
         except Exception as e: return None, str(e)
 
     model_gemini, aktif_model_ismi = gemini_baglan()
     
-    # --- YAN MENÜ ---
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
         st.title("Ziraat AI")
@@ -180,14 +176,14 @@ else:
             st.image(image, width=300)
             
             if st.button("🔍 Analiz Et", type="primary"):
-                with st.spinner("Bitki inceleniyor ve reçete yazılıyor..."):
+                with st.spinner("Bitki inceleniyor..."):
                     model = model_yukle(secilen_bitki)
                     if model:
                         img = image.resize((160,160))
                         img_arr = np.array(img).astype("float32")
                         if img_arr.ndim==2: img_arr=np.stack((img_arr,)*3, axis=-1)
                         elif img_arr.shape[-1]==4: img_arr=img_arr[:,:,:3]
-                        img_arr = img_arr[...,::-1] # BGR
+                        img_arr = img_arr[...,::-1] 
                         input_data = np.expand_dims(img_arr, axis=0)
                         
                         try:
@@ -202,101 +198,87 @@ else:
                             if "Sağlıklı" in sonuc:
                                 st.success(f"✅ **Durum:** {sonuc}")
                                 st.balloons()
-                                st.session_state['recete_hafizasi'] = "Bitkiniz gayet sağlıklı görünüyor. Düzenli sulama ve gübrelemeye devam edin."
+                                st.session_state['recete_hafizasi'] = "Bitki sağlıklı. Koruyucu önlem olarak düzenli bakım yapınız."
                             else:
-                                st.error(f"⚠️ **Tespit Edilen:** {sonuc}")
-                                # --- GEMINI REÇETE MODÜLÜ ---
+                                st.error(f"⚠️ **Tespit:** {sonuc}")
                                 if model_gemini:
-                                    prompt = f"""
-                                    Sen uzman bir Ziraat Mühendisisin. 
-                                    Bitki: {secilen_bitki}
-                                    Hastalık: {sonuc}
-                                    
-                                    Lütfen bu hastalık hakkında aşağıdaki 3 başlık altında detaylı bilgi ver:
-                                    1. Hastalık Nedir ve Belirtileri Nelerdir?
-                                    2. Kültürel Önlemler (İlaçsız ne yapılmalı?)
-                                    3. Kimyasal Mücadele ve İlaç Önerisi (Etken maddeler)
-                                    
-                                    Çiftçi dostu, anlaşılır bir dil kullan.
-                                    """
-                                    recete = model_gemini.generate_content(prompt).text
-                                    st.session_state['recete_hafizasi'] = recete
+                                    prompt = f"Bitki: {secilen_bitki}, Hastalık: {sonuc}. Bu hastalık için 3 başlıkta bilgi ver: 1-Nedir, 2-Kültürel Önlem, 3-İlaçlı Mücadele."
+                                    try:
+                                        recete = model_gemini.generate_content(prompt).text
+                                        st.session_state['recete_hafizasi'] = recete
+                                    except Exception as e:
+                                        st.session_state['recete_hafizasi'] = f"Reçete oluşturulamadı (Hata: {e})"
                                 else:
-                                    st.session_state['recete_hafizasi'] = "Reçete oluşturulamadı."
+                                    st.session_state['recete_hafizasi'] = "Yapay zeka bağlantısı yok."
                         except Exception as e: st.error(f"Hata: {e}")
 
-            # --- ANALİZ SONRASI GÖSTERİM ALANI ---
             if st.session_state['son_teshis']:
                 st.markdown("---")
-                with st.expander("📋 Detaylı Reçete ve Tedavi Planı (Tıkla)", expanded=True):
+                with st.expander("📋 Reçete ve Tedavi (Tıkla)", expanded=True):
                     st.markdown(st.session_state['recete_hafizasi'])
                 
                 pdf_data = create_pdf(st.session_state['son_bitki'], st.session_state['son_teshis'], st.session_state['recete_hafizasi'])
-                st.download_button(label="📄 Bu Raporu İndir (PDF)", data=pdf_data, file_name="ziraat_rapor.pdf", mime="application/pdf")
+                st.download_button(label="📄 Raporu İndir (PDF)", data=pdf_data, file_name="rapor.pdf", mime="application/pdf")
                 
                 st.markdown("---")
-                st.subheader("💬 Asistan ile Konuş")
-                st.info(f"Şu an **{st.session_state['son_bitki']}** bitkisindeki **{st.session_state['son_teshis']}** durumu hakkında konuşuyorsunuz.")
-                
-                soru = st.text_input("Aklına takılan başka bir şey var mı?")
-                if st.button("Soruyu Gönder"):
+                st.subheader("💬 Asistan")
+                soru = st.text_input("Sorunuz var mı?")
+                if st.button("Sor"):
                     if model_gemini and soru:
-                        with st.spinner("Asistan yazıyor..."):
-                            cevap = model_gemini.generate_content(f"Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}, Önceki Reçete: {st.session_state['recete_hafizasi']}. Kullanıcı sorusu: {soru}").text
-                            st.write(cevap)
+                        with st.spinner("Cevaplanıyor..."):
+                            try:
+                                cevap = model_gemini.generate_content(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}").text
+                                st.write(cevap)
+                            except Exception as e: st.error(f"Cevap alınamadı: {e}")
 
-    # --- SEKME 2: BÖLGE VE TAKVİM (GERİ GELDİ!) ---
+    # --- SEKME 2: BÖLGE VE TAKVİM ---
     with tab2:
         st.header("🌤️ Bölgesel Tarım Verileri")
         sehir = st.text_input("Şehir Giriniz:", value="Antalya")
         
         if st.button("Verileri Getir", type="primary"):
              try:
-                # 1. HAVA DURUMU
+                # 1. Hava Durumu
                 geo = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1").json()
-                lat = geo["results"][0]["latitude"]
-                lon = geo["results"][0]["longitude"]
-                w = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m").json()["current"]
-                
-                st.subheader(f"📍 {sehir.upper()} Hava Durumu")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Sıcaklık", f"{w['temperature_2m']} °C")
-                c2.metric("Nem", f"%{w['relative_humidity_2m']}")
-                c3.metric("Rüzgar", f"{w['wind_speed_10m']} km/s")
-                
-                st.markdown("---")
-                
-                # 2. AKILLI TAKVİM (GERİ EKLENDİ)
-                st.subheader("📅 Akıllı Tarım Takvimi")
-                
-                # Ay ismini Türkçe bul
-                aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
-                simdiki_ay = aylar[int(time.strftime("%m")) - 1]
-                
-                if model_gemini:
-                    with st.spinner(f"{simdiki_ay} ayı için tarımsal analiz yapılıyor..."):
-                        prompt_takvim = f"""
-                        Şu an {simdiki_ay} ayındayız ve yer Türkiye'nin {sehir} şehri.
-                        Bu ayda ve bu bölgede çiftçiler genel olarak hangi işlemleri yapmalıdır? (Ekim, hasat, budama, ilaçlama vb.)
-                        Lütfen 4-5 maddede, çiftçi dostu bir dille özetle.
-                        """
-                        takvim_cevap = model_gemini.generate_content(prompt_takvim).text
-                        st.info(f"**{simdiki_ay} Ayı İçin Tavsiyeler:**\n\n" + takvim_cevap)
-                else:
-                    st.warning("Yapay zeka takvimi şu an oluşturulamadı.")
+                if "results" in geo:
+                    lat = geo["results"][0]["latitude"]
+                    lon = geo["results"][0]["longitude"]
+                    w = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m").json()["current"]
                     
-             except: st.error("Şehir verisi alınamadı, lütfen şehir ismini kontrol edin.")
+                    st.subheader(f"📍 {sehir.upper()}")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Sıcaklık", f"{w['temperature_2m']} °C")
+                    c2.metric("Nem", f"%{w['relative_humidity_2m']}")
+                    c3.metric("Rüzgar", f"{w['wind_speed_10m']} km/s")
+                    
+                    st.markdown("---")
+                    
+                    # 2. Takvim
+                    st.subheader("📅 Akıllı Takvim")
+                    aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+                    simdiki_ay = aylar[int(time.strftime("%m")) - 1]
+                    
+                    if model_gemini:
+                        with st.spinner(f"{simdiki_ay} ayı analiz ediliyor..."):
+                            try:
+                                prompt_takvim = f"{simdiki_ay} ayında {sehir} ilinde tarımsal olarak ne yapılır? 4 maddede özetle."
+                                takvim_cevap = model_gemini.generate_content(prompt_takvim).text
+                                st.info(f"**{simdiki_ay} Ayı Tavsiyeleri:**\n\n" + takvim_cevap)
+                            except Exception as e:
+                                st.error(f"Takvim oluşturulamadı. Hata Detayı: {e}")
+                    else:
+                        st.error(f"Yapay Zeka Bağlı Değil: {aktif_model_ismi}")
+                else:
+                    st.error("Şehir bulunamadı.")
+             except Exception as e: st.error(f"Bağlantı Hatası: {e}")
 
     # --- SEKME 3: YARDIM ---
     with tab3:
         st.markdown("""
-        <div style="background-color: rgba(255, 255, 255, 0.9); padding: 25px; border-radius: 15px; border-left: 5px solid #4CAF50; color: black;">
-            <h2 style="color: #1b5e20; margin-top: 0;">❓ Nasıl Kullanılır?</h2>
-            <p style="font-size: 16px;">
-                <b>1.</b> <code>Teşhis</code> sekmesinden bitkiyi seçin ve fotoğrafını yükleyin.<br>
-                <b>2.</b> Analiz bitince otomatik olarak reçete oluşturulacaktır.<br>
-                <b>3.</b> Reçeteyi okuyabilir veya PDF olarak indirebilirsiniz.<br>
-                <b>4.</b> <code>Bölge</code> sekmesinden şehrinizdeki hava durumunu ve aylık tarım takvimini görebilirsiniz.
-            </p>
+        <div style="background-color: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 10px; border-left: 5px solid #4CAF50; color: black;">
+            <h3 style="color: #1b5e20;">❓ Yardım</h3>
+            <p>1. <b>Teşhis</b> sekmesinden fotoğraf yükleyin.<br>
+            2. Analiz sonrası reçeteniz otomatik oluşur.<br>
+            3. <b>Bölge</b> sekmesinden şehrinizin verilerine bakın.</p>
         </div>
         """, unsafe_allow_html=True)
