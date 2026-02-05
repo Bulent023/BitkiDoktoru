@@ -61,7 +61,7 @@ def tasariimi_uygula():
             background-color: rgba(255, 255, 255, 0.9) !important;
         }}
         input[type="text"] {{
-            color: black !important;
+            color: white !important;
         }}
 
         /* Ana ekrandaki kutucuklar (Expander) */
