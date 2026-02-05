@@ -11,13 +11,13 @@ import time
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿")
 
 # KOTA AYARLARI
-SORU_LIMITI = 20        # Kullanıcı başına günlük soru hakkı
-BEKLEME_SURESI = 15     # Spam koruması (saniye)
+SORU_LIMITI = 20        
+BEKLEME_SURESI = 15     
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 
 # ==============================================================================
-# 2. GEMINI BAĞLANTISI (YASAKLI MODELLER ENGELLENDİ) 🛡️
+# 2. GEMINI BAĞLANTISI (AKILLI FİLTRE & ESNEK MOD) 🛡️
 # ==============================================================================
 @st.cache_resource
 def gemini_baglan():
@@ -26,25 +26,41 @@ def gemini_baglan():
             api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
             
-            # SADECE BU MODELLERİ KULLAN (Diğerleri yasak)
-            # 2.5-flash gibi düşük kotalı modelleri listeye almıyoruz.
-            izin_verilen_modeller = [
-                'gemini-1.5-flash',          # ÖNCELİK 1: En yüksek kota (1500/gün)
-                'gemini-1.5-flash-latest',   # ÖNCELİK 2: Alternatif sürüm
-                'gemini-1.5-pro',            # ÖNCELİK 3: Pro sürüm
-                'gemini-1.0-pro'             # ÖNCELİK 4: Eski ama sağlam sürüm
+            # 1. AŞAMA: ÖNCELİKLİ MODELLERİ DENE (Yüksek Kota)
+            oncelikli_modeller = [
+                'gemini-1.5-flash',
+                'gemini-1.5-flash-latest',
+                'gemini-1.5-pro',
+                'gemini-1.0-pro',
+                'gemini-pro'
             ]
             
-            # Sadece listedekileri dene. Bulamazsan hata ver (Düşük kotalıya gitme).
-            for m in izin_verilen_modeller:
+            for m in oncelikli_modeller:
                 try:
                     test_model = genai.GenerativeModel(m)
                     test_model.generate_content("System check") 
-                    return test_model, m # Çalışan modeli ve ismini döndür
+                    return test_model, m 
                 except:
                     continue
             
-            return None, "Uygun Model Bulunamadı"
+            # 2. AŞAMA: LİSTEDEKİLER ÇALIŞMAZSA "OTOMATİK BUL" (Yedek Plan)
+            # Ama 'gemini-2.5' isimli o düşük kotalı modeli filtrele!
+            tum_modeller = genai.list_models()
+            for m in tum_modeller:
+                if 'generateContent' in m.supported_generation_methods:
+                    # YASAKLI MODEL FİLTRESİ 🚫
+                    if 'gemini-2.5' in m.name: 
+                        continue # Bunu atla, bu 20 limitli!
+                    
+                    # Yasaklı değilse dene
+                    try:
+                        yedek_model = genai.GenerativeModel(m.name)
+                        yedek_model.generate_content("System check")
+                        return yedek_model, m.name
+                    except:
+                        continue
+
+            return None, "Hiçbir uygun model bulunamadı (Kütüphane güncellemesi gerekebilir)"
                     
         return None, "Anahtar Yok"
     except Exception as e:
@@ -55,9 +71,10 @@ model_gemini, aktif_model_ismi = gemini_baglan()
 
 # Durum Bildirimi
 if model_gemini:
-    st.caption(f"✅ Yapay Zeka Hazır: `{aktif_model_ismi}` (Yüksek Kota)")
+    st.caption(f"✅ Yapay Zeka Hazır: `{aktif_model_ismi}`")
 else:
-    st.error("⚠️ Yapay Zeka Bağlantı Hatası: Yüksek kotalı modellerden hiçbirine erişilemedi.")
+    st.error(f"⚠️ Bağlantı Hatası: {aktif_model_ismi}")
+    st.info("Lütfen 'requirements.txt' dosyasında 'google-generativeai>=0.8.3' yazdığından emin olun.")
 
 st.markdown("---")
 
@@ -193,4 +210,4 @@ if 'son_teshis' in st.session_state and model_gemini:
                     st.error(f"Hata: {e}")
                     
 elif 'son_teshis' in st.session_state and not model_gemini:
-     st.warning("⚠️ Sohbet sistemi şu an mola verdi (Kota Limiti).")
+     st.warning("⚠️ Sohbet sistemi şu an mola verdi (Model bulunamadı).")
