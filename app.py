@@ -15,12 +15,11 @@ from streamlit_lottie import st_lottie
 # ==============================================================================
 st.set_page_config(page_title="Ziraat AI", page_icon="🌿", layout="centered")
 
-# --- SESSION STATE (DURUM KONTROLÜ) ---
-# Uygulama ilk açıldığında 'giris_yapildi' diye bir değişken yoksa, False olarak oluştur.
+# --- SESSION STATE ---
 if 'giris_yapildi' not in st.session_state:
     st.session_state['giris_yapildi'] = False
 
-# --- ARKA PLAN TASARIMI ---
+# --- ARKA PLAN VE CSS ---
 def tasariimi_uygula():
     dosya_adi = "arkaplan.jpg"
     bg_image_style = ""
@@ -40,13 +39,17 @@ def tasariimi_uygula():
             background-attachment: fixed;
             background-size: cover;
         }}
-        /* Butonları Güzelleştir */
+        /* Butonu Güzelleştir ve Ortala */
         div.stButton > button {{
             width: 100%;
-            border-radius: 10px;
+            border-radius: 20px; /* Daha yuvarlak köşeler */
             font-weight: bold;
+            font-size: 18px;
+            padding: 10px;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.3); /* Hafif gölge */
+            border: 2px solid white;
         }}
-        /* Sidebar Tasarımı */
+        /* Sidebar */
         section[data-testid="stSidebar"] {{
             background-color: rgba(15, 25, 15, 0.95) !important;
             border-right: 3px solid #4CAF50;
@@ -54,7 +57,7 @@ def tasariimi_uygula():
         section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, p, label {{
             color: white !important;
         }}
-        /* Input Tasarımı */
+        /* Input */
         input[type="text"] {{
             color: white !important;
         }}
@@ -79,7 +82,7 @@ def tasariimi_uygula():
 
 tasariimi_uygula()
 
-# --- ANİMASYON YÜKLEME ---
+# --- ANİMASYON FONKSİYONU ---
 def load_lottieurl(url):
     try:
         r = requests.get(url)
@@ -88,28 +91,35 @@ def load_lottieurl(url):
     except: return None
 
 # ==============================================================================
-# 2. GİRİŞ EKRANI (SPLASH SCREEN) 🎬
+# 2. GİRİŞ EKRANI (SPLASH SCREEN - TAM ORTALI) 🎯
 # ==============================================================================
 if not st.session_state['giris_yapildi']:
-    # --- GİRİŞ EKRANI TASARIMI ---
-    st.markdown("<h1 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #e8f5e9; text-shadow: 1px 1px 2px #000000;'>Akıllı Bitki Doktoru</h3>", unsafe_allow_html=True)
+    st.write("")
+    st.write("") # Biraz üst boşluk
     
-    # Animasyon (Büyüyen Bitki)
+    # Başlıklar
+    st.markdown("<h1 style='text-align: center; color: white; font-size: 60px; text-shadow: 3px 3px 6px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #e8f5e9; text-shadow: 1px 1px 2px #000000;'>Çiftçinin Dijital Asistanı</h3>", unsafe_allow_html=True)
+    
+    # Animasyon
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
     if lottie_intro:
-        st_lottie(lottie_intro, height=300, key="intro_anim")
+        st_lottie(lottie_intro, height=250, key="intro_anim")
     
-    # Boşluk bırak ve ortalanmış buton koy
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.write("")
+    st.write("") # Animasyon ile buton arası boşluk
+    
+    # --- BUTONU ORTALAMA KISMI ---
+    # [3, 2, 3] oranı butonu tam ortaya ve ideal genişliğe getirir.
+    col_bosluk1, col_buton, col_bosluk2 = st.columns([3, 2, 3])
+    
+    with col_buton:
         if st.button("🚀 UYGULAMAYI BAŞLAT", type="primary"):
             st.session_state['giris_yapildi'] = True
-            st.rerun() # Sayfayı yenile ve ana ekrana geç
+            st.rerun()
+    # -----------------------------
 
 # ==============================================================================
-# 3. ANA UYGULAMA (GİRİŞ YAPILDIYSA BURASI ÇALIŞIR) 🏗️
+# 3. ANA UYGULAMA 🏗️
 # ==============================================================================
 else:
     # --- GEMINI BAĞLANTISI ---
@@ -138,7 +148,8 @@ else:
         st.title("Ziraat AI")
         st.caption(f"Aktif Model: {aktif_model_ismi}")
         
-        if st.button("🔙 Çıkış Yap / Başa Dön"):
+        st.markdown("---")
+        if st.button("🔙 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
@@ -148,7 +159,7 @@ else:
     # --- SEKMELER ---
     tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler", "ℹ️ Yardım"])
 
-    # --- SEKME 1: HASTALIK TEŞHİSİ ---
+    # --- SEKME 1: TEŞHİS ---
     with tab1:
         st.markdown("### 📸 Fotoğraf Yükle")
         
@@ -172,7 +183,7 @@ else:
             return None
         
         def siniflari_al(bitki):
-             # Basitleştirilmiş sınıf listesi (Örnek)
+             # Bu listeleri projenize göre tam doldurabilirsiniz
              if bitki == "Elma (Apple)": return ['Kara Leke', 'Kara Çürüklük', 'Pas', 'Sağlıklı']
              return ["Hastalık", "Sağlıklı"]
 
@@ -199,7 +210,9 @@ else:
                         try:
                             tahmin = model.predict(input_data)
                             idx = np.argmax(tahmin)
-                            sonuc = siniflari_al(secilen_bitki)[idx] if idx < 4 else "Bilinmeyen"
+                            # Buradaki sınıf listesi tam olmadığında hata almamak için basit kontrol:
+                            siniflar = siniflari_al(secilen_bitki)
+                            sonuc = siniflar[idx] if idx < len(siniflar) else "Tespit Edildi"
                             
                             if "Sağlıklı" in sonuc:
                                 st.success(f"**Durum:** {sonuc}")
@@ -213,7 +226,7 @@ else:
                                     
                             st.session_state['son_teshis'] = sonuc
                             st.session_state['son_bitki'] = secilen_bitki
-                        except: st.error("Hata oluştu.")
+                        except: st.error("Model tahmin hatası.")
 
         # Sohbet
         if 'son_teshis' in st.session_state and model_gemini:
@@ -223,7 +236,7 @@ else:
                 res = model_gemini.generate_content(f"Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}, Soru: {soru}")
                 st.write(res.text)
 
-    # --- SEKME 2: BÖLGESEL VERİLER ---
+    # --- SEKME 2: BÖLGE ---
     with tab2:
         st.header("🌤️ Bölgesel Veriler")
         sehir = st.text_input("Şehir:", value="Antalya")
