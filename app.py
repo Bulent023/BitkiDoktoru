@@ -39,16 +39,33 @@ def tasariimi_uygula():
             background-attachment: fixed;
             background-size: cover;
         }}
-        /* Butonu Güzelleştir ve Ortala */
-        div.stButton > button {{
-            width: 100%;
-            border-radius: 20px; /* Daha yuvarlak köşeler */
+        
+        /* --- DÜZELTİLEN KISIM: BUTON ORTALAMA (FLEXBOX) --- */
+        /* Butonun kapsayıcısını esnek kutu yap ve ortala */
+        .stButton {{
+            display: flex;
+            justify-content: center;
+        }}
+        
+        /* Butonun kendisinin özellikleri */
+        .stButton > button {{
+            width: auto !important;     /* Genişlik içeriğe göre olsun */
+            min-width: 250px;           /* Ama çok da küçülmesin */
+            max-width: 350px;           /* Çok da büyümesin */
+            border-radius: 25px;        /* Tam oval kenarlar */
             font-weight: bold;
             font-size: 18px;
-            padding: 10px;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.3); /* Hafif gölge */
+            padding: 12px 24px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.4); /* Derinlik gölgesi */
             border: 2px solid white;
+            transition: transform 0.2s; /* Tıklama efekti için */
         }}
+        
+        .stButton > button:active {{
+            transform: scale(0.95); /* Tıklayınca hafif küçülsün */
+        }}
+        /* -------------------------------------------------- */
+
         /* Sidebar */
         section[data-testid="stSidebar"] {{
             background-color: rgba(15, 25, 15, 0.95) !important;
@@ -91,14 +108,14 @@ def load_lottieurl(url):
     except: return None
 
 # ==============================================================================
-# 2. GİRİŞ EKRANI (SPLASH SCREEN - TAM ORTALI) 🎯
+# 2. GİRİŞ EKRANI (SPLASH SCREEN) 🎯
 # ==============================================================================
 if not st.session_state['giris_yapildi']:
     st.write("")
-    st.write("") # Biraz üst boşluk
+    st.write("") 
     
     # Başlıklar
-    st.markdown("<h1 style='text-align: center; color: white; font-size: 60px; text-shadow: 3px 3px 6px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: white; font-size: 50px; text-shadow: 3px 3px 6px #000000;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #e8f5e9; text-shadow: 1px 1px 2px #000000;'>Çiftçinin Dijital Asistanı</h3>", unsafe_allow_html=True)
     
     # Animasyon
@@ -106,17 +123,15 @@ if not st.session_state['giris_yapildi']:
     if lottie_intro:
         st_lottie(lottie_intro, height=250, key="intro_anim")
     
-    st.write("") # Animasyon ile buton arası boşluk
+    st.write("") 
+    st.write("") 
     
-    # --- BUTONU ORTALAMA KISMI ---
-    # [3, 2, 3] oranı butonu tam ortaya ve ideal genişliğe getirir.
-    col_bosluk1, col_buton, col_bosluk2 = st.columns([3, 2, 3])
-    
-    with col_buton:
-        if st.button("🚀 UYGULAMAYI BAŞLAT", type="primary"):
-            st.session_state['giris_yapildi'] = True
-            st.rerun()
-    # -----------------------------
+    # --- BUTON KISMI (SÜTUNSUZ - CSS İLE ORTALANDI) ---
+    # Artık columns kullanmıyoruz, CSS otomatik ortalıyor.
+    if st.button("🚀 UYGULAMAYI BAŞLAT", type="primary"):
+        st.session_state['giris_yapildi'] = True
+        st.rerun()
+    # --------------------------------------------------
 
 # ==============================================================================
 # 3. ANA UYGULAMA 🏗️
@@ -183,7 +198,6 @@ else:
             return None
         
         def siniflari_al(bitki):
-             # Bu listeleri projenize göre tam doldurabilirsiniz
              if bitki == "Elma (Apple)": return ['Kara Leke', 'Kara Çürüklük', 'Pas', 'Sağlıklı']
              return ["Hastalık", "Sağlıklı"]
 
@@ -210,7 +224,6 @@ else:
                         try:
                             tahmin = model.predict(input_data)
                             idx = np.argmax(tahmin)
-                            # Buradaki sınıf listesi tam olmadığında hata almamak için basit kontrol:
                             siniflar = siniflari_al(secilen_bitki)
                             sonuc = siniflar[idx] if idx < len(siniflar) else "Tespit Edildi"
                             
@@ -219,7 +232,6 @@ else:
                                 st.balloons()
                             else:
                                 st.error(f"**Durum:** {sonuc}")
-                                # Gemini Reçete
                                 if model_gemini:
                                     res = model_gemini.generate_content(f"{secilen_bitki} bitkisinde {sonuc} hastalığı için kısa tedavi önerisi yaz.")
                                     st.info(res.text)
@@ -251,13 +263,12 @@ else:
                 c1.metric("Sıcaklık", f"{w['temperature_2m']} °C")
                 c2.metric("Rüzgar", f"{w['wind_speed_10m']} km/s")
                 
-                # Takvim
                 if model_gemini:
                     takvim = model_gemini.generate_content(f"Şu an {time.strftime('%B')} ayındayız, yer {sehir}. Çiftçiler ne yapmalı? Kısa özet.")
                     st.success(takvim.text)
              except: st.error("Veri alınamadı.")
 
-    # --- SEKME 3: YARDIM (BEYAZ KUTULU) ---
+    # --- SEKME 3: YARDIM ---
     with tab3:
         st.markdown("""
         <div style="background-color: rgba(255, 255, 255, 0.9); padding: 25px; border-radius: 15px; border-left: 5px solid #4CAF50; color: black;">
