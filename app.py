@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image, ImageOps
 import google.generativeai as genai
 import time
+from fpdf import FPDF # PDF kütüphanesi
 
 # ==============================================================================
 # 1. AYARLAR
@@ -17,7 +18,47 @@ BEKLEME_SURESI = 15
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 
 # ==============================================================================
-# 2. GEMINI BAĞLANTISI (AKILLI FİLTRE & ESNEK MOD) 🛡️
+# 2. YARDIMCI FONKSİYONLAR (PDF İÇİN)
+# ==============================================================================
+# PDF kütüphanesi Türkçe karakterlerde (Ş,Ğ,İ) sorun çıkarabilir.
+# Bu fonksiyon raporun bozuk görünmemesi için karakterleri düzeltir.
+def tr_duzelt(text):
+    source = "şŞıİğĞüÜöÖçÇ"
+    target = "sSiIgGuUoOcC"
+    translation_table = str.maketrans(source, target)
+    return text.translate(translation_table)
+
+def rapor_olustur(bitki, hastalik, recete):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Başlık
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="ZIRAAT AI - TESHIS RAPORU", ln=1, align='C')
+    pdf.ln(10) # Boşluk
+    
+    # Bilgiler
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=tr_duzelt(f"Tarih: {time.strftime('%d-%m-%Y')}"), ln=1)
+    pdf.cell(200, 10, txt=tr_duzelt(f"Analiz Edilen Bitki: {bitki}"), ln=1)
+    pdf.cell(200, 10, txt=tr_duzelt(f"Tespit Edilen Durum: {hastalik}"), ln=1)
+    pdf.ln(10)
+    
+    # Yapay Zeka Tavsiyesi
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="YAPAY ZEKA ONERISI VE RECETE:", ln=1)
+    pdf.set_font("Arial", size=11)
+    pdf.multi_cell(0, 10, txt=tr_duzelt(recete))
+    
+    # Alt Bilgi
+    pdf.ln(20)
+    pdf.set_font("Arial", 'I', 8)
+    pdf.cell(0, 10, txt="Bu rapor yapay zeka tarafindan uretilmistir. Kesin teshis icin uzmana danisiniz.", align='C')
+    
+    return pdf.output(dest='S').encode('latin-1', 'ignore')
+
+# ==============================================================================
+# 3. GEMINI BAĞLANTISI
 # ==============================================================================
 @st.cache_resource
 def gemini_baglan():
@@ -26,7 +67,6 @@ def gemini_baglan():
             api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
             
-            # 1. AŞAMA: ÖNCELİKLİ MODELLERİ DENE (Yüksek Kota)
             oncelikli_modeller = [
                 'gemini-1.5-flash',
                 'gemini-1.5-flash-latest',
@@ -43,16 +83,11 @@ def gemini_baglan():
                 except:
                     continue
             
-            # 2. AŞAMA: LİSTEDEKİLER ÇALIŞMAZSA "OTOMATİK BUL" (Yedek Plan)
-            # Ama 'gemini-2.5' isimli o düşük kotalı modeli filtrele!
+            # Yedek plan (Yasaklı modeller hariç)
             tum_modeller = genai.list_models()
             for m in tum_modeller:
                 if 'generateContent' in m.supported_generation_methods:
-                    # YASAKLI MODEL FİLTRESİ 🚫
-                    if 'gemini-2.5' in m.name: 
-                        continue # Bunu atla, bu 20 limitli!
-                    
-                    # Yasaklı değilse dene
+                    if 'gemini-2.5' in m.name: continue 
                     try:
                         yedek_model = genai.GenerativeModel(m.name)
                         yedek_model.generate_content("System check")
@@ -60,26 +95,22 @@ def gemini_baglan():
                     except:
                         continue
 
-            return None, "Hiçbir uygun model bulunamadı (Kütüphane güncellemesi gerekebilir)"
-                    
+            return None, "Model Bulunamadı"
         return None, "Anahtar Yok"
     except Exception as e:
         return None, str(e)
 
-# Bağlantıyı Başlat
 model_gemini, aktif_model_ismi = gemini_baglan()
 
-# Durum Bildirimi
 if model_gemini:
-    st.caption(f"✅ Yapay Zeka Hazır: `{aktif_model_ismi}`")
+    st.caption(f"✅ Sistem Hazır: `{aktif_model_ismi}`")
 else:
     st.error(f"⚠️ Bağlantı Hatası: {aktif_model_ismi}")
-    st.info("Lütfen 'requirements.txt' dosyasında 'google-generativeai>=0.8.3' yazdığından emin olun.")
 
 st.markdown("---")
 
 # ==============================================================================
-# 3. TEŞHİS MODELİ YÜKLEME
+# 4. TEŞHİS MODELİ YÜKLEME
 # ==============================================================================
 @st.cache_resource
 def model_yukle(bitki_tipi):
@@ -120,16 +151,17 @@ def siniflari_getir(bitki_tipi):
     return ["Hastalık", "Sağlıklı"]
 
 # ==============================================================================
-# 4. KULLANICI OTURUM TAKİBİ
+# 5. KULLANICI OTURUM TAKİBİ
 # ==============================================================================
 if 'soru_sayaci' not in st.session_state:
     st.session_state['soru_sayaci'] = 0
-
 if 'son_soru_zamani' not in st.session_state:
     st.session_state['son_soru_zamani'] = 0
+if 'rapor_hazir' not in st.session_state:
+    st.session_state['rapor_hazir'] = None # PDF verisini burada tutacağız
 
 # ==============================================================================
-# 5. ARAYÜZ VE ANALİZ
+# 6. ARAYÜZ VE ANALİZ
 # ==============================================================================
 secilen_bitki = st.selectbox("🌿 Hangi bitkiyi analiz edelim?", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)"])
 yuklenen_dosya = st.file_uploader("📸 Fotoğraf Yükle", type=["jpg", "png", "jpeg"])
@@ -138,8 +170,8 @@ if yuklenen_dosya:
     image = Image.open(yuklenen_dosya)
     st.image(image, caption='Yüklenen Fotoğraf', use_container_width=True)
     
-    if st.button("🔍 Hastalığı Analiz Et", type="primary"):
-        with st.spinner('Yapay zeka analiz ediyor...'):
+    if st.button("🔍 Hastalığı Analiz Et ve Raporla", type="primary"):
+        with st.spinner('Yapay zeka analiz ediyor ve reçete yazıyor...'):
             model = model_yukle(secilen_bitki)
             if model:
                 hedef_boyut = (160, 160)
@@ -148,9 +180,7 @@ if yuklenen_dosya:
                 if img_array.ndim == 2: img_array = np.stack((img_array,)*3, axis=-1)
                 elif img_array.shape[-1] == 4: img_array = img_array[:,:,:3]
 
-                # BGR DÖNÜŞÜMÜ
-                img_array = img_array[..., ::-1] 
-
+                img_array = img_array[..., ::-1] # BGR Düzeltmesi
                 input_data = np.expand_dims(img_array, axis=0)
                 
                 try:
@@ -162,13 +192,31 @@ if yuklenen_dosya:
                     
                     if indeks < len(siniflar):
                         sonuc_ismi = siniflar[indeks]
+                        
+                        # --- OTOMATİK RAPOR OLUŞTURMA KISMI ---
+                        recete_metni = "Hastalık sağlıklı olduğu için tedavi gerekmez."
+                        
                         if "Sağlıklı" in sonuc_ismi:
                             st.success(f"**Teşhis:** {sonuc_ismi}")
                             st.balloons()
                         else:
                             st.error(f"**Teşhis:** {sonuc_ismi}")
-                        
+                            
+                            # Hastalık varsa Gemini'den reçete iste (Kotadan düşmez, sistem kullanır)
+                            if model_gemini:
+                                prompt_rapor = f"Bitki: {secilen_bitki}. Hastalık: {sonuc_ismi}. Bu hastalık için çiftçiye uygulanabilir, maddeler halinde kısa bir tedavi reçetesi ve ilaç önerisi yaz. Türkçe karakter kullanma (ornek: ş yerine s yaz)."
+                                try:
+                                    response = model_gemini.generate_content(prompt_rapor)
+                                    recete_metni = response.text
+                                except:
+                                    recete_metni = "Yapay zeka reçete oluştururken bir hata oluştu."
+
                         st.info(f"**Güven Oranı:** %{guven:.2f}")
+                        
+                        # PDF Oluştur ve Hafızaya Al
+                        pdf_data = rapor_olustur(secilen_bitki, sonuc_ismi, recete_metni)
+                        st.session_state['rapor_hazir'] = pdf_data
+                        
                         st.session_state['son_teshis'] = sonuc_ismi
                         st.session_state['son_bitki'] = secilen_bitki
                     else:
@@ -176,8 +224,18 @@ if yuklenen_dosya:
                 except Exception as e:
                     st.error(f"Tahmin hatası: {e}")
 
+    # --- PDF İNDİRME BUTONU ---
+    if st.session_state['rapor_hazir']:
+        st.download_button(
+            label="📄 PDF Raporunu İndir",
+            data=st.session_state['rapor_hazir'],
+            file_name="ziraat_ai_rapor.pdf",
+            mime="application/pdf",
+            type="secondary"
+        )
+
 # ==============================================================================
-# 6. SOHBET MODU
+# 7. SOHBET MODU
 # ==============================================================================
 if 'son_teshis' in st.session_state and model_gemini:
     st.markdown("---")
@@ -200,7 +258,7 @@ if 'son_teshis' in st.session_state and model_gemini:
             
         elif soru:
             with st.spinner('Cevaplanıyor...'):
-                prompt = f"Sen uzman bir ziraat mühendisisin. Kullanıcının bitkisi: {st.session_state['son_bitki']}. Teşhis edilen hastalık: {st.session_state['son_teshis']}. Kullanıcı sorusu: '{soru}'. Bu soruya kısa, öz ve çiftçi dostu bir dille cevap ver. Tedavi yöntemlerinden bahset."
+                prompt = f"Sen uzman bir ziraat mühendisisin. Bitki: {st.session_state['son_bitki']}. Hastalık: {st.session_state['son_teshis']}. Soru: '{soru}'. Kısa cevap ver."
                 try:
                     cevap = model_gemini.generate_content(prompt)
                     st.write(cevap.text)
@@ -210,4 +268,4 @@ if 'son_teshis' in st.session_state and model_gemini:
                     st.error(f"Hata: {e}")
                     
 elif 'son_teshis' in st.session_state and not model_gemini:
-     st.warning("⚠️ Sohbet sistemi şu an mola verdi (Model bulunamadı).")
+     st.warning("⚠️ Sohbet sistemi şu an mola verdi.")
