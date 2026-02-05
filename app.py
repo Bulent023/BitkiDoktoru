@@ -7,57 +7,75 @@ import time
 from fpdf import FPDF
 import base64 
 import os
-import requests # Hava durumu için
+import requests 
 
 # ==============================================================================
-# 1. AYARLAR VE GÖRSEL TASARIM 🎨
+# 1. AYARLAR VE GÖRSEL TASARIM (CSS DÜZELTİLDİ) 🎨
 # ==============================================================================
 st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿", layout="centered")
 
-# --- ARKA PLAN RESMİ EKLEME ---
-def arka_plani_ayarla():
-    dosya_adi = "arkaplan.jpg"
+# --- ARKA PLAN VE SIDEBAR TASARIMI ---
+def tasariimi_uygula():
+    # 1. Arka Plan Resmini Ayarla
+    dosya_adi = "arka_plan.jpg"
+    bg_image_style = ""
+    
     if os.path.exists(dosya_adi):
         with open(dosya_adi, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-        
-        css_kodu = f"""
+        bg_image_style = f'background-image: url("data:image/jpg;base64,{encoded_string}");'
+    else:
+        # Yedek resim
+        bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
+
+    # 2. CSS İle Renkleri Zorla (Okunabilirlik İçin)
+    st.markdown(
+        f"""
         <style>
+        /* Ana Arka Plan */
         .stApp {{
-            background-image: url("data:image/jpg;base64,{encoded_string}");
+            {bg_image_style}
             background-attachment: fixed;
             background-size: cover;
         }}
-        div[data-testid="stExpander"] {{
-            background-color: rgba(0, 0, 0, 0.6);
-            color: white;
-        }}
+        
+        /* Sidebar (Yan Menü) Arka Planı - KOYU VE OKUNAKLI */
         section[data-testid="stSidebar"] {{
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(15, 25, 15, 0.95) !important; /* Çok koyu yeşil/siyah */
+            border-right: 3px solid #4CAF50; /* Sağ tarafa şık bir çizgi */
+        }}
+        
+        /* Sidebar'daki Yazıların Rengini BEYAZ Yap */
+        section[data-testid="stSidebar"] h1, 
+        section[data-testid="stSidebar"] h2, 
+        section[data-testid="stSidebar"] h3, 
+        section[data-testid="stSidebar"] label, 
+        section[data-testid="stSidebar"] div,
+        section[data-testid="stSidebar"] p {{
+            color: #ffffff !important;
+            text-shadow: 1px 1px 2px black; /* Yazı gölgesi ile netlik */
+        }}
+        
+        /* Input (Giriş) Kutularının İçi */
+        div[data-baseweb="input"] {{
+            background-color: rgba(255, 255, 255, 0.9) !important;
+        }}
+        input[type="text"] {{
+            color: black !important;
+        }}
+
+        /* Ana ekrandaki kutucuklar (Expander) */
+        div[data-testid="stExpander"] {{
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 10px;
         }}
         </style>
-        """
-        st.markdown(css_kodu, unsafe_allow_html=True)
-    else:
-        yedek_url = "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop"
-        st.markdown(
-            f"""
-            <style>
-            .stApp {{
-                background-image: url("{yedek_url}");
-                background-attachment: fixed;
-                background-size: cover;
-            }}
-            div[data-testid="stExpander"] {{
-                background-color: rgba(0, 0, 0, 0.6);
-                color: white;
-            }}
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
+        """,
+        unsafe_allow_html=True
+    )
 
-arka_plani_ayarla()
+tasariimi_uygula()
 
 # KOTA AYARLARI
 SORU_LIMITI = 20        
@@ -68,7 +86,6 @@ BEKLEME_SURESI = 15
 # ==============================================================================
 def hava_durumu_getir(sehir):
     try:
-        # 1. Şehrin koordinatlarını bul (Geocoding)
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1&language=tr&format=json"
         geo_response = requests.get(geo_url).json()
         
@@ -76,7 +93,6 @@ def hava_durumu_getir(sehir):
             lat = geo_response["results"][0]["latitude"]
             lon = geo_response["results"][0]["longitude"]
             
-            # 2. Hava durumunu çek
             weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto"
             w_response = requests.get(weather_url).json()
             
@@ -85,32 +101,37 @@ def hava_durumu_getir(sehir):
     except:
         return None
 
-# Yan Menü (Sidebar) Oluşturma
 with st.sidebar:
-    st.header("🌤️ Tarımsal Hava Durumu")
-    sehir_secimi = st.text_input("Şehir veya İlçe Girin:", value="Ankara")
+    st.title("🌤️ Hava Durumu") # Header yerine Title daha büyük durur
+    st.write("Bölgenizdeki tarımsal veriler:")
     
-    if st.button("Hava Durumunu Gör"):
+    sehir_secimi = st.text_input("Şehir Giriniz:", value="Ankara")
+    
+    if st.button("Verileri Getir", type="primary"): # Butonu vurguladık
         veri = hava_durumu_getir(sehir_secimi)
         if veri:
-            st.success(f"📍 {sehir_secimi.upper()} İçin Veriler:")
+            st.success(f"📍 {sehir_secimi.upper()}")
+            
+            # Metrikleri daha şık gösterelim
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Sıcaklık", f"{veri['temperature_2m']} °C")
             with col2:
                 st.metric("Nem", f"%{veri['relative_humidity_2m']}")
-            st.metric("Rüzgar Hızı", f"{veri['wind_speed_10m']} km/s")
             
-            # Ziraat Uyarısı
+            st.metric("Rüzgar", f"{veri['wind_speed_10m']} km/s")
+            
             if veri['wind_speed_10m'] > 15:
-                st.warning("⚠️ Rüzgar sert! İlaçlama yaparken dikkatli olun.")
-            if veri['relative_humidity_2m'] > 80:
-                st.info("💧 Nem yüksek. Mantar hastalıklarına dikkat!")
+                st.warning("⚠️ Rüzgar sert! İlaçlama yapmayınız.")
+            elif veri['relative_humidity_2m'] > 80:
+                st.info("💧 Nem yüksek. Mantar riski!")
+            else:
+                st.info("✅ Hava şartları ilaçlama için uygun.")
         else:
-            st.error("Şehir bulunamadı, lütfen doğru yazın.")
+            st.error("Şehir bulunamadı.")
             
     st.markdown("---")
-    st.write("🌿 **Ziraat AI** © 2024")
+    st.caption("🌿 **Ziraat AI** v1.2")
 
 st.title("🌿 Ziraat AI - Akıllı Bitki Doktoru")
 st.markdown("**Yapay Zeka Destekli Hastalık Teşhisi ve Tedavi Uzmanı**")
