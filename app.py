@@ -40,19 +40,19 @@ def tasariimi_uygula():
             background-size: cover;
         }}
         
-        /* --- KESİN ORTALAMA ÇÖZÜMÜ (MARGIN AUTO) --- */
+        /* MOBİL UYUMLU BUTON ORTALAMA */
         div.stButton > button {{
             display: block !important;
             margin-left: auto !important;
             margin-right: auto !important;
-            width: 70% !important; /* Mobilde çok geniş olmasın diye %70 yaptık */
+            width: 70% !important;
             border-radius: 25px;
             font-weight: bold;
             font-size: 20px;
             padding: 12px 24px;
             box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
             border: 2px solid white;
-            background-color: #ff4b4b; /* Buton rengini belirgin yapalım */
+            background-color: #ff4b4b; 
             color: white;
         }}
         
@@ -61,7 +61,6 @@ def tasariimi_uygula():
             color: #ff4b4b;
             background-color: white;
         }}
-        /* ------------------------------------------ */
 
         /* Sidebar */
         section[data-testid="stSidebar"] {{
@@ -121,8 +120,6 @@ if not st.session_state['giris_yapildi']:
     st.write("") 
     st.write("") 
     
-    # --- BUTON KISMI (SÜTUNSUZ) ---
-    # CSS'deki 'margin: auto' komutu bunu zorla ortalayacak.
     if st.button("🚀 UYGULAMAYI BAŞLAT", key="baslat_butonu"):
         st.session_state['giris_yapildi'] = True
         st.rerun()
@@ -191,13 +188,31 @@ else:
                 except: return None
             return None
         
+        # --- DÜZELTİLEN KISIM: TÜM SINIF LİSTELERİ GERİ EKLENDİ ---
         def siniflari_al(bitki):
-             if bitki == "Elma (Apple)": return ['Kara Leke', 'Kara Çürüklük', 'Pas', 'Sağlıklı']
-             return ["Hastalık", "Sağlıklı"]
+             if bitki == "Elma (Apple)": 
+                 return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
+             elif bitki == "Domates (Tomato)":
+                 return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
+             elif bitki == "Mısır (Corn)":
+                 return ['Mısır Gri Yaprak Lekesi', 'Mısır Yaygın Pas', 'Mısır Kuzey Yaprak Yanıklığı', 'Mısır Sağlıklı']
+             elif bitki == "Patates (Potato)":
+                 return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
+             elif bitki == "Üzüm (Grape)":
+                 return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
+             elif bitki == "Biber (Pepper)":
+                 return ['Biber Bakteriyel Leke', 'Biber Sağlıklı']
+             elif bitki == "Şeftali (Peach)":
+                 return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
+             elif bitki == "Çilek (Strawberry)":
+                 return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
+             elif bitki == "Kiraz (Cherry)":
+                 return ['Kiraz Külleme', 'Kiraz Sağlıklı']
+             return ["Hastalık", "Sağlıklı"] # Varsayılan
 
         col_a, col_b = st.columns(2)
         with col_a:
-            secilen_bitki = st.selectbox("Bitki:", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)"])
+            secilen_bitki = st.selectbox("Bitki:", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)", "Kiraz (Cherry)"])
         with col_b:
             dosya = st.file_uploader("Resim:", type=["jpg","png"])
 
@@ -218,21 +233,27 @@ else:
                         try:
                             tahmin = model.predict(input_data)
                             idx = np.argmax(tahmin)
+                            
+                            # Hata kontrolü ile sınıfı çek
                             siniflar = siniflari_al(secilen_bitki)
-                            sonuc = siniflar[idx] if idx < len(siniflar) else "Tespit Edildi"
+                            if idx < len(siniflar):
+                                sonuc = siniflar[idx]
+                            else:
+                                sonuc = f"Bilinmeyen Durum (Kod: {idx})"
                             
                             if "Sağlıklı" in sonuc:
                                 st.success(f"**Durum:** {sonuc}")
                                 st.balloons()
                             else:
                                 st.error(f"**Durum:** {sonuc}")
+                                # Gemini Reçete
                                 if model_gemini:
                                     res = model_gemini.generate_content(f"{secilen_bitki} bitkisinde {sonuc} hastalığı için kısa tedavi önerisi yaz.")
                                     st.info(res.text)
                                     
                             st.session_state['son_teshis'] = sonuc
                             st.session_state['son_bitki'] = secilen_bitki
-                        except: st.error("Model tahmin hatası.")
+                        except Exception as e: st.error(f"Tahmin hatası: {e}")
 
         # Sohbet
         if 'son_teshis' in st.session_state and model_gemini:
