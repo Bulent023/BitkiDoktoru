@@ -17,7 +17,7 @@ st.set_page_config(page_title="Ziraat AI - Bitki Doktoru", page_icon="🌿", lay
 # --- ARKA PLAN VE SIDEBAR TASARIMI ---
 def tasariimi_uygula():
     # 1. Arka Plan Resmini Ayarla
-    dosya_adi = "arka_plan.jpg"
+    dosya_adi = "arkaplan.jpg"
     bg_image_style = ""
     
     if os.path.exists(dosya_adi):
