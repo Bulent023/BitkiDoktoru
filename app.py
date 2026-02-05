@@ -146,9 +146,9 @@ else:
     st.title("🌿 Akıllı Bitki Doktoru")
 
     # --- SEKMELER ---
-    tab1, tab2, tab3 = st.tabs(["🌿 Teşhis", "🌤️ Bölge", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler", "ℹ️ Yardım"])
 
-    # --- SEKME 1: TEŞHİS ---
+    # --- SEKME 1: HASTALIK TEŞHİSİ ---
     with tab1:
         st.markdown("### 📸 Fotoğraf Yükle")
         
@@ -223,7 +223,7 @@ else:
                 res = model_gemini.generate_content(f"Bitki: {st.session_state['son_bitki']}, Hastalık: {st.session_state['son_teshis']}, Soru: {soru}")
                 st.write(res.text)
 
-    # --- SEKME 2: BÖLGE ---
+    # --- SEKME 2: BÖLGESEL VERİLER ---
     with tab2:
         st.header("🌤️ Bölgesel Veriler")
         sehir = st.text_input("Şehir:", value="Antalya")
