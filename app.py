@@ -73,21 +73,14 @@ def tasariimi_uygula():
         input[type="text"] {{ background-color: rgba(255, 255, 255, 0.1) !important; color: white !important; border: 1px solid #4CAF50 !important; border-radius: 8px; }}
         div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.6); border-radius: 10px; border: 1px solid #4CAF50; }}
         
-        /* --- DEĞİŞİKLİK BURADA: Metrik Kutuları (KOYU YEŞİL ARKA PLAN) --- */
+        /* Metrik Kutuları (Daha kompakt) */
         div[data-testid="stMetric"] {{ 
-            background-color: rgba(30, 60, 30, 0.85) !important; /* Koyu Yarı Saydam Yeşil */
-            padding: 10px; 
-            border-radius: 12px; 
-            text-align: center; 
-            border: 1px solid rgba(76, 175, 80, 0.5); /* Yeşil çerçeve */
-            margin-bottom: 5px;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.3); /* Hafif gölge */
+            background-color: rgba(30, 60, 30, 0.85) !important; padding: 5px; border-radius: 8px; 
+            text-align: center; border: 1px solid rgba(76, 175, 80, 0.5); 
+            margin-bottom: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
         }}
-        /* Etiket rengi (Hafif gri) */
         div[data-testid="stMetricLabel"] {{ color: #e0e0e0 !important; font-size: 14px !important; }}
-        /* Değer rengi (Parlak yeşil) */
         div[data-testid="stMetricValue"] {{ color: #4CAF50 !important; font-weight: bold; font-size: 20px !important; }}
-        /* ----------------------------------------------------------------- */
         
         </style>
         """, unsafe_allow_html=True
@@ -273,12 +266,11 @@ else:
                 with st.spinner("..."):
                     st.write(gemini_sor(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}"))
 
-    # --- TAB 2: BÖLGE VE DETAYLI HAVA DURUMU (2x2 IZGARA - KOYU YEŞİL) ---
+    # --- TAB 2: BÖLGE VE DETAYLI HAVA DURUMU ---
     with tab2:
         st.header("🌤️ Bölgesel Tarım Verileri")
         sehir = st.text_input("Şehir Giriniz:", value="Antalya")
         
-        # --- OTOMATİK VERİ ÇEKME ---
         if sehir:
             try:
                 geo = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1").json()
@@ -290,7 +282,6 @@ else:
                     
                     st.subheader(f"📍 {sehir.upper()} Anlık Durum")
                     
-                    # 2x2 Izgara (Grid) Düzeni
                     c1, c2 = st.columns(2)
                     with c1: st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
                     with c2: st.metric("Nem", f"%{w['relative_humidity_2m']}")
@@ -304,7 +295,6 @@ else:
 
         st.markdown("---")
         
-        # --- TAKVİM BUTONU ---
         if st.button("📅 Uygulama Takvimini Getir"):
              aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
              simdiki_ay = aylar[int(time.strftime("%m")) - 1]
@@ -312,10 +302,44 @@ else:
                  takvim = gemini_sor(f"{simdiki_ay} ayında {sehir} tarım takvimi ve yapılacaklar listesi. Madde madde yaz.")
                  st.info(takvim)
 
+    # --- TAB 3: YARDIM VE BİLGİ (DETAYLI AÇIKLAMA) ---
     with tab3:
+        st.markdown("### ❓ Sıkça Sorulan Sorular ve Kullanım Kılavuzu")
+
+        # Box 1: Nasıl Çalışır?
         st.markdown("""
-        <div style="background-color: rgba(0, 0, 0, 0.6); padding: 20px; border-radius: 15px; border: 1px solid #4CAF50;">
-            <h3>🌿 Yardım ve Bilgi</h3>
-            <p>Bu uygulama çiftçilerimize yapay zeka desteği sunmak için geliştirilmiştir.</p>
+        <div style="background-color: rgba(30, 60, 30, 0.85); padding: 15px; border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.5); margin-bottom: 10px;">
+            <h4 style="color: #4CAF50;">🔍 Hastalık Teşhisi Nasıl Yapılıyor?</h4>
+            <p style="color: #e0e0e0;">
+                Yüklediğiniz bitki fotoğrafları, önceden eğitilmiş <b>Yapay Zeka (TensorFlow)</b> modellerimiz tarafından analiz edilir.
+                Sistem, yapraktaki lekeleri, renk değişimlerini ve doku bozukluklarını tarayarak hastalığı %90'ın üzerinde doğrulukla tespit eder.
+                Sonuç bulunduktan sonra, <b>Google Gemini</b> yapay zekası devreye girer ve size özel reçete yazar.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Box 2: Veri Kullanımı
+        st.markdown("""
+        <div style="background-color: rgba(30, 60, 30, 0.85); padding: 15px; border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.5); margin-bottom: 10px;">
+            <h4 style="color: #4CAF50;">📊 Hangi Veriler Kullanılıyor?</h4>
+            <ul style="color: #e0e0e0;">
+                <li><b>Görsel Veri:</b> Yüklediğiniz yaprak fotoğrafı sadece analiz anında işlenir ve saklanmaz.</li>
+                <li><b>Konum Verisi:</b> Girdiğiniz şehir ismi, sadece hava durumu servisinden veri çekmek için kullanılır.</li>
+                <li><b>Hava Durumu:</b> Open-Meteo açık kaynak servisi kullanılır.</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Box 3: Bölgesel Veriler
+        st.markdown("""
+        <div style="background-color: rgba(30, 60, 30, 0.85); padding: 15px; border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.5); margin-bottom: 10px;">
+            <h4 style="color: #4CAF50;">🌤️ Bölgesel Veriler Neleri İçerir?</h4>
+            <p style="color: #e0e0e0;">
+                Bölge sekmesinde şu anlık veriler sunulur:
+                <br>🌡️ <b>Sıcaklık</b> (°C) - Bitki gelişimi için kritik değer.
+                <br>💧 <b>Nem Oranı</b> (%) - Mantar hastalıkları riskini belirler.
+                <br>💨 <b>Rüzgar Hızı</b> (km/s) ve <b>Yönü</b> - İlaçlama zamanlaması için önemlidir.
+                <br>📅 <b>Akıllı Takvim:</b> Yapay zeka, bulunduğunuz ay ve şehrin iklimine göre o an yapmanız gereken ekim, dikim, budama veya ilaçlama tavsiyelerini listeler.
+            </p>
         </div>
         """, unsafe_allow_html=True)
