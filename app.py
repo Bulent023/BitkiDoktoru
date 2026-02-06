@@ -25,8 +25,8 @@ if 'calisan_model_ismi' not in st.session_state: st.session_state['calisan_model
 # ==============================================================================
 def tasariimi_uygula():
     bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
-    if os.path.exists("arka_plan.jpg"):
-        with open("arka_plan.jpg", "rb") as image_file:
+    if os.path.exists("arkaplan.jpg"):
+        with open("arkaplan.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image_style = f'background-image: url("data:image/jpg;base64,{encoded_string}");'
 
