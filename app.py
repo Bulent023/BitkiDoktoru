@@ -22,8 +22,8 @@ if 'recete_hafizasi' not in st.session_state: st.session_state['recete_hafizasi'
 # --- CSS TASARIMI ---
 def tasariimi_uygula():
     bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
-    if os.path.exists("arkaplan.jpg"):
-        with open("arkaplan.jpg", "rb") as image_file:
+    if os.path.exists("arka_plan.jpg"):
+        with open("arka_plan.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image_style = f'background-image: url("data:image/jpg;base64,{encoded_string}");'
 
@@ -39,14 +39,12 @@ def tasariimi_uygula():
         }}
         div.stButton > button:hover {{ border-color: #ff4b4b; color: #ff4b4b; background-color: white; }}
         section[data-testid="stSidebar"] {{ background-color: rgba(15, 25, 15, 0.95) !important; border-right: 3px solid #4CAF50; }}
-        section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, p, label {{ color: white !important; }}
+        * {{ color: white; }}
         input[type="text"] {{ color: white !important; }}
         div[data-baseweb="input"] {{ background-color: rgba(20, 40, 20, 0.8) !important; border: 1px solid #4CAF50; }}
-        div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.8); color: white; border-radius: 10px; }}
-        div[data-testid="stTabs"] button[aria-selected="true"] {{ background-color: #4CAF50; color: white; }}
-        div.stInfo {{ background-color: rgba(0, 0, 0, 0.7) !important; color: white !important; border: 1px solid #2196F3; }}
-        div.stSuccess {{ background-color: rgba(0, 50, 0, 0.7) !important; color: white !important; }}
-        div.stError {{ background-color: rgba(50, 0, 0, 0.8) !important; color: white !important; }}
+        div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.8); border-radius: 10px; }}
+        div[data-testid="stTabs"] button[aria-selected="true"] {{ background-color: #4CAF50; }}
+        div.stInfo, div.stSuccess, div.stError {{ background-color: rgba(0, 0, 0, 0.8) !important; color: white !important; }}
         </style>
         """, unsafe_allow_html=True
     )
@@ -56,87 +54,61 @@ def load_lottieurl(url):
     try: return requests.get(url).json()
     except: return None
 
-# --- GÜÇLENDİRİLMİŞ KARAKTER TEMİZLEME FONKSİYONU ---
 def tr_duzelt(text):
-    if not isinstance(text, str):
-        text = str(text)
-        
-    # 1. Türkçe karakterleri İngilizce karşılıklarına çevir
+    if not isinstance(text, str): text = str(text)
     source = "şŞıİğĞüÜöÖçÇ"
     target = "sSiIgGuUoOcC"
     translation_table = str.maketrans(source, target)
     text = text.translate(translation_table)
-    
-    # 2. Emojileri ve desteklenmeyen sembolleri sil (ZORUNLU)
-    # Bu satır metni 'latin-1' formatına sığdırır, sığmayanları (emoji vb.) siler.
     text = text.encode('latin-1', 'ignore').decode('latin-1')
-    
     return text
 
 def create_pdf(bitki, hastalik, recete):
     pdf = FPDF()
     pdf.add_page()
-    
-    # Font Ekleme (Varsayılan Arial kullanılır)
     pdf.set_font("Arial", 'B', 16)
-    
-    # Başlık
-    pdf.cell(200, 10, txt=tr_duzelt("ZIRAAT AI - TESHIS RAPORU"), ln=1, align='C')
+    pdf.cell(200, 10, txt="ZIRAAT AI - TESHIS RAPORU", ln=1, align='C')
     pdf.ln(10)
-    
-    # Bilgiler
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, txt=tr_duzelt(f"Tarih: {time.strftime('%d-%m-%Y')}"), ln=1)
     pdf.cell(200, 10, txt=tr_duzelt(f"Bitki: {bitki}"), ln=1)
     pdf.cell(200, 10, txt=tr_duzelt(f"Teshis: {hastalik}"), ln=1)
-    
     pdf.ln(10)
-    
-    # Reçete Bölümü
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt=tr_duzelt("DETAYLI BILGI VE RECETE:"), ln=1)
-    
+    pdf.cell(200, 10, txt="DETAYLI BILGI VE RECETE:", ln=1)
     pdf.set_font("Arial", size=11)
-    # Reçete metni çok uzun olabileceği için multi_cell kullanıyoruz
-    # ve tr_duzelt ile emojilerden arındırıyoruz
     pdf.multi_cell(0, 10, txt=tr_duzelt(recete))
-    
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 2. MANUEL GEMINI BAĞLANTISI (KOTA DOSTU MOD) 🛠️
+# 2. MANUEL GEMINI BAĞLANTISI (HATA GÖSTEREN MOD) 🛠️
 # ==============================================================================
 def gemini_sor(prompt):
     if "GOOGLE_API_KEY" not in st.secrets:
-        return "HATA: API Anahtarı bulunamadı."
+        return "HATA: Secrets içinde API Anahtarı bulunamadı."
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    ucretsiz_modeller = [
-        "gemini-1.5-flash", 
-        "gemini-1.5-pro", 
-        "gemini-pro"
-    ]
+    # Sadece En Garanti Modeli Kullanıyoruz (Karmaşayı önlemek için)
+    model_ismi = "gemini-1.5-flash" 
     
     headers = {'Content-Type': 'application/json'}
     data = {"contents": [{"parts": [{"text": prompt}]}]}
-
-    for model_ismi in ucretsiz_modeller:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_ismi}:generateContent?key={api_key}"
+    
+    # URL (v1beta)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_ismi}:generateContent?key={api_key}"
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
         
-        try:
-            response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            # BURASI ÖNEMLİ: Hatanın kendisini ekrana basıyoruz
+            return f"GOOGLE HATASI: {response.text}"
             
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            elif response.status_code in [429, 404, 503]:
-                continue 
-            else:
-                return f"Hata ({model_ismi}): {response.status_code} - {response.text}"
-        except Exception as e:
-            continue
-
-    return "⚠️ Üzgünüz, tüm modellerin günlük kotası dolmuş olabilir. Lütfen yarın tekrar deneyin veya yeni bir API anahtarı alın."
+    except Exception as e:
+        return f"Bağlantı Hatası: {str(e)}"
 
 # ==============================================================================
 # 3. GİRİŞ EKRANI
@@ -162,14 +134,14 @@ else:
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
         st.title("Ziraat AI")
-        st.success("Mod: Kota Dostu (Flash/Pro)")
+        st.success("Sistem: Gemini Flash v1.5")
         
         if st.button("🔙 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
     st.title("🌿 Akıllı Bitki Doktoru")
-    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi & Reçete", "🌤️ Bölgesel Hava Durumu ve Takvim", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Teşhis & Reçete", "🌤️ Bölge ve Takvim", "ℹ️ Yardım"])
 
     # --- SEKME 1: TEŞHİS & REÇETE ---
     with tab1:
@@ -246,12 +218,11 @@ else:
                 with st.expander("📋 Reçete ve Tedavi (Tıkla)", expanded=True):
                     st.markdown(st.session_state['recete_hafizasi'])
                 
-                # PDF Hatası için güvenli oluşturma
+                # PDF İndirme
                 try:
                     pdf_data = create_pdf(st.session_state['son_bitki'], st.session_state['son_teshis'], st.session_state['recete_hafizasi'])
                     st.download_button(label="📄 Raporu İndir (PDF)", data=pdf_data, file_name="rapor.pdf", mime="application/pdf")
-                except Exception as e:
-                    st.warning("PDF oluşturulamadı (Karakter hatası). Lütfen ekran görüntüsü alınız.")
+                except: st.warning("PDF oluşturulamadı.")
                 
                 st.markdown("---")
                 st.subheader("💬 Asistan")
@@ -289,7 +260,12 @@ else:
                     with st.spinner(f"{simdiki_ay} ayı analiz ediliyor..."):
                         prompt_takvim = f"{simdiki_ay} ayında {sehir} ilinde tarımsal olarak ne yapılır? 4 maddede özetle."
                         takvim_cevap = gemini_sor(prompt_takvim)
-                        st.info(f"**{simdiki_ay} Ayı Tavsiyeleri:**\n\n" + takvim_cevap)
+                        
+                        # Hata varsa kırmızı, yoksa normal göster
+                        if "GOOGLE HATASI" in takvim_cevap:
+                            st.error(takvim_cevap)
+                        else:
+                            st.info(f"**{simdiki_ay} Ayı Tavsiyeleri:**\n\n" + takvim_cevap)
                 else:
                     st.error("Şehir bulunamadı.")
              except Exception as e: st.error(f"Bağlantı Hatası: {e}")
