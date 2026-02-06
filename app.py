@@ -201,7 +201,7 @@ else:
                 "Patates (Potato)": "potato_uzman_model.keras", "Biber (Pepper)": "pepper_uzman_model.keras",
                 "Şeftali (Peach)": "peach_uzman_model.keras", "Çilek (Strawberry)": "strawberry_uzman_model.keras",
                 "Kiraz (Cherry)": "cherry_uzman_model.keras",
-                "Ceviz (Walnut)": "walnut_uzman_model.keras"  # <-- CEVİZ EKLENDİ
+                "Ceviz (Walnut)": "walnut_uzman_model.keras" 
             }
             if bitki in mapper:
                 try: return tf.keras.models.load_model(mapper[bitki])
@@ -218,21 +218,12 @@ else:
              elif bitki == "Şeftali (Peach)": return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
              elif bitki == "Çilek (Strawberry)": return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
              elif bitki == "Kiraz (Cherry)": return ['Kiraz Külleme', 'Kiraz Sağlıklı']
-             
-             # --- CEVİZ SINIFLARI (EĞİTİM SIRASINA GÖRE) ---
+             # --- CEVİZ ---
              elif bitki == "Ceviz (Walnut)": 
-                 return [
-                     'Ceviz Antraknoz',           # 0
-                     'Ceviz Leke Hastalığı',      # 1
-                     'Ceviz Sağlıklı',            # 2 (Normal)
-                     'Ceviz Yaprak Delen (Çil)',  # 3 (Shot hole)
-                     'Ceviz Yaprak Uyuzu (Akar)'  # 4 (Gall mite)
-                 ]
-             # ----------------------------------------------
+                 return ['Ceviz Antraknoz', 'Ceviz Leke Hastalığı', 'Ceviz Sağlıklı', 'Ceviz Yaprak Delen (Çil)', 'Ceviz Yaprak Uyuzu (Akar)']
              
              return ["Hastalık", "Sağlıklı"]
 
-        # SEÇİM KUTUSUNA CEVİZ EKLENDİ
         secilen = st.selectbox("Bitki Seçiniz:", [
             "Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", 
             "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", 
@@ -242,10 +233,16 @@ else:
         
         dosya = st.file_uploader("Resim Yükleyiniz:")
 
+        if dosya:
+             # Resmin önizlemesini gösterelim (Kullanıcı ne yüklediğini görsün)
+             st.image(Image.open(dosya), width=200)
+
         if dosya and st.button("Analiz Et"):
             with st.spinner("İnceleniyor..."):
                 model = model_yukle(secilen)
                 if model:
+                    # --- HATA DÜZELTİLDİ: image = Image.open(dosya) EKLENDİ ---
+                    image = Image.open(dosya) 
                     img = image.resize((160,160))
                     img_arr = np.array(img).astype("float32")
                     if img_arr.ndim==2: img_arr=np.stack((img_arr,)*3, axis=-1)
@@ -321,7 +318,7 @@ else:
                  takvim = gemini_sor(f"{simdiki_ay} ayında {sehir} tarım takvimi ve yapılacaklar listesi. Madde madde yaz.")
                  st.info(takvim)
 
-    # --- TAB 3: YARDIM VE BİLGİ ---
+    # --- TAB 3: YARDIM ---
     with tab3:
         st.markdown("### ❓ Sıkça Sorulan Sorular ve Kullanım Kılavuzu")
 
