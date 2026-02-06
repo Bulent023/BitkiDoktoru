@@ -58,7 +58,7 @@ def tasariimi_uygula():
         /* --- TAB (SEKME) KONUMLANDIRMA VE TASARIM --- */
         /* Tab Container'ını komple aşağı itiyoruz (İSTEĞİNİZ ÜZERİNE 20px) */
         div[data-testid="stTabs"] {{
-            margin-top: 20px !important; 
+            margin-top: 50px !important; 
         }}
 
         div[data-testid="stTabs"] button {{
