@@ -81,7 +81,7 @@ def create_pdf(bitki, hastalik, recete):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 2. MANUEL GEMINI BAĞLANTISI (HATA GÖSTEREN MOD) 🛠️
+# 2. MANUEL GEMINI BAĞLANTISI (MODEL DENEME DÖNGÜSÜ) 🛠️
 # ==============================================================================
 def gemini_sor(prompt):
     if "GOOGLE_API_KEY" not in st.secrets:
@@ -89,26 +89,40 @@ def gemini_sor(prompt):
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # Sadece En Garanti Modeli Kullanıyoruz (Karmaşayı önlemek için)
-    model_ismi = "gemini-1.5-flash" 
+    # 3 Farklı modeli sırayla deneyeceğiz.
+    # Biri "404 Bulunamadı" derse diğerine geçecek.
+    modeller = [
+        "gemini-pro",           # En sağlam çalışan model
+        "gemini-1.5-flash",     # Hızlı model
+        "gemini-1.5-flash-latest", 
+        "gemini-1.0-pro"
+    ]
     
     headers = {'Content-Type': 'application/json'}
     data = {"contents": [{"parts": [{"text": prompt}]}]}
-    
-    # URL (v1beta)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_ismi}:generateContent?key={api_key}"
-    
-    try:
-        response = requests.post(url, headers=headers, json=data)
+
+    for model_ismi in modeller:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_ismi}:generateContent?key={api_key}"
         
-        if response.status_code == 200:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
-        else:
-            # BURASI ÖNEMLİ: Hatanın kendisini ekrana basıyoruz
-            return f"GOOGLE HATASI: {response.text}"
+        try:
+            response = requests.post(url, headers=headers, json=data)
             
-    except Exception as e:
-        return f"Bağlantı Hatası: {str(e)}"
+            if response.status_code == 200:
+                # Başarılı olursa cevabı döndür ve çık
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            
+            # Eğer 404 (Bulunamadı) veya 503 (Sunucu Hatası) ise sıradaki modeli dene
+            elif response.status_code in [404, 503]:
+                continue 
+            
+            # Eğer 429 (Kota Dolu) veya 400 (Bad Request) ise hatayı bas (Çünkü model değişse de bu düzelmez)
+            else:
+                return f"GOOGLE HATASI ({model_ismi}): {response.text}"
+                
+        except Exception as e:
+            continue
+
+    return "⚠️ Hata: Hiçbir yapay zeka modeli yanıt vermedi. Lütfen API anahtarınızı kontrol edin."
 
 # ==============================================================================
 # 3. GİRİŞ EKRANI
@@ -134,7 +148,7 @@ else:
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
         st.title("Ziraat AI")
-        st.success("Sistem: Gemini Flash v1.5")
+        st.success("Sistem: Gemini Pro (Auto)")
         
         if st.button("🔙 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
@@ -261,7 +275,6 @@ else:
                         prompt_takvim = f"{simdiki_ay} ayında {sehir} ilinde tarımsal olarak ne yapılır? 4 maddede özetle."
                         takvim_cevap = gemini_sor(prompt_takvim)
                         
-                        # Hata varsa kırmızı, yoksa normal göster
                         if "GOOGLE HATASI" in takvim_cevap:
                             st.error(takvim_cevap)
                         else:
