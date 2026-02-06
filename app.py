@@ -10,9 +10,10 @@ import requests
 from streamlit_lottie import st_lottie 
 
 # ==============================================================================
-# 1. AYARLAR
+# 1. AYARLAR (MOBİL İÇİN GÜNCELLENDİ)
 # ==============================================================================
-st.set_page_config(page_title="Ziraat AI", page_icon="🌿", layout="centered")
+# DİKKAT: layout="wide" yaptık. Mobilde tam genişlik kullanması için.
+st.set_page_config(page_title="Ziraat AI", page_icon="🌿", layout="wide")
 
 if 'giris_yapildi' not in st.session_state: st.session_state['giris_yapildi'] = False
 if 'son_teshis' not in st.session_state: st.session_state['son_teshis'] = None
@@ -21,7 +22,7 @@ if 'recete_hafizasi' not in st.session_state: st.session_state['recete_hafizasi'
 if 'calisan_model_ismi' not in st.session_state: st.session_state['calisan_model_ismi'] = None
 
 # ==============================================================================
-# 2. MODERN TASARIM (CSS) - TAB GRADYANLARI EKLENDİ 🎨
+# 2. MOBİL UYUMLU TASARIM (CSS) 🎨
 # ==============================================================================
 def tasariimi_uygula():
     bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
@@ -35,6 +36,16 @@ def tasariimi_uygula():
         <style>
         .stApp {{ {bg_image_style} background-attachment: fixed; background-size: cover; }}
         
+        /* --- MOBİL İÇİN ÖZEL AYARLAR --- */
+        /* Ana içerik bloğunun kenar boşluklarını daraltıyoruz */
+        .block-container {{
+            padding-top: 2rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }}
+        /* ----------------------------- */
+
         /* --- MODERN BUTONLAR --- */
         div.stButton > button {{
             background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%);
@@ -49,31 +60,17 @@ def tasariimi_uygula():
         /* ----------------------- */
 
         /* --- TAB (SEKME) GRADYAN TASARIMI --- */
-        /* Tüm sekmelerin genel yapısı */
         div[data-testid="stTabs"] button {{
-            background: linear-gradient(to bottom, rgba(40, 60, 40, 0.85), rgba(20, 30, 20, 0.95)); /* Koyu yarı saydam gradyan */
-            color: #e0e0e0 !important; /* Hafif kırık beyaz yazı */
-            border-radius: 15px 15px 0 0; /* Sadece üst köşeleri yuvarla */
-            margin-right: 5px; /* Sekmeler arası boşluk */
-            border: 1px solid rgba(76, 175, 80, 0.3); border-bottom: none;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            text-shadow: 0px 1px 2px rgba(0,0,0,0.8); /* Yazının okunmasını sağlayan gölge */
+            background: linear-gradient(to bottom, rgba(40, 60, 40, 0.85), rgba(20, 30, 20, 0.95));
+            color: #e0e0e0 !important; border-radius: 15px 15px 0 0; margin-right: 5px;
+            border: 1px solid rgba(76, 175, 80, 0.3); border-bottom: none; font-weight: bold;
+            transition: all 0.3s ease; text-shadow: 0px 1px 2px rgba(0,0,0,0.8);
+            flex: 1; /* Mobilde sekmelerin eşit genişlikte olması için */
         }}
-
-        /* Üzerine gelince (Hover) */
-        div[data-testid="stTabs"] button:hover {{
-             background: linear-gradient(to bottom, rgba(60, 90, 60, 0.95), rgba(30, 50, 30, 1));
-             color: #4CAF50 !important; /* Yazı yeşil olsun */
-        }}
-
-        /* Aktif (Seçili) Sekme */
+        div[data-testid="stTabs"] button:hover {{ background: linear-gradient(to bottom, rgba(60, 90, 60, 0.95), rgba(30, 50, 30, 1)); color: #4CAF50 !important; }}
         div[data-testid="stTabs"] button[aria-selected="true"] {{
-            background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%) !important; /* Canlı yeşil gradyan */
-            color: white !important;
-            border: 1px solid #4CAF50; border-bottom: none;
-            box-shadow: 0 -2px 10px rgba(76, 175, 80, 0.3); /* Hafif bir parlama efekti */
-            text-shadow: 0px 2px 4px rgba(0,0,0,0.5);
+            background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%) !important; color: white !important;
+            border: 1px solid #4CAF50; border-bottom: none; box-shadow: 0 -2px 10px rgba(76, 175, 80, 0.3); text-shadow: 0px 2px 4px rgba(0,0,0,0.5);
         }}
         /* ------------------------------------ */
 
@@ -81,7 +78,12 @@ def tasariimi_uygula():
         * {{ color: white; }}
         input[type="text"] {{ background-color: rgba(255, 255, 255, 0.1) !important; color: white !important; border: 1px solid #4CAF50 !important; border-radius: 8px; }}
         div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.6); border-radius: 10px; border: 1px solid #4CAF50; }}
-        div[data-testid="stMetric"] {{ background-color: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.2); }}
+        /* Metrik kutularını mobilde alt alta daha iyi göstermek için margin ekleyelim */
+        div[data-testid="stMetric"] {{ 
+            background-color: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 10px; 
+            text-align: center; border: 1px solid rgba(255,255,255,0.2); 
+            margin-bottom: 10px; /* Alt alta dizilince yapışmasınlar */
+        }}
         div[data-testid="stMetricLabel"] {{ color: #e0e0e0 !important; }}
         div[data-testid="stMetricValue"] {{ color: #4CAF50 !important; font-weight: bold; }}
         
@@ -157,29 +159,31 @@ def gemini_sor(prompt):
     except Exception as e: return f"Bağlantı Hatası: {e}"
 
 # ==============================================================================
-# 4. GİRİŞ EKRANI
+# 4. GİRİŞ EKRANI (MOBİL UYUMLU)
 # ==============================================================================
 if not st.session_state['giris_yapildi']:
     st.write("")
     st.markdown("<h1 style='text-align: center;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
-    if lottie_intro: st_lottie(lottie_intro, height=250)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("🚀 BAŞLAT (MODEL TARA)"):
-            if "GOOGLE_API_KEY" in st.secrets:
-                test = model_bul_ve_getir(st.secrets["GOOGLE_API_KEY"])
-                if test:
-                    st.session_state['calisan_model_ismi'] = test
-                    st.success(f"Bağlantı: {test}")
-                    time.sleep(1)
-                    st.session_state['giris_yapildi'] = True
-                    st.rerun()
-                else: st.error("API Anahtarı ile model bulunamadı.")
-            else: st.error("API Anahtarı Yok")
+    if lottie_intro: st_lottie(lottie_intro, height=200) # Mobilde animasyon boyutu biraz küçültüldü
+    
+    st.write("") # Boşluk
+    
+    # DEĞİŞİKLİK: Kolonları (columns) kaldırdık, buton direkt alt alta gelecek.
+    if st.button("🚀 BAŞLAT (MODEL TARA)"):
+        if "GOOGLE_API_KEY" in st.secrets:
+            test = model_bul_ve_getir(st.secrets["GOOGLE_API_KEY"])
+            if test:
+                st.session_state['calisan_model_ismi'] = test
+                st.success(f"Bağlantı: {test}")
+                time.sleep(1)
+                st.session_state['giris_yapildi'] = True
+                st.rerun()
+            else: st.error("API Anahtarı ile model bulunamadı.")
+        else: st.error("API Anahtarı Yok")
 
 # ==============================================================================
-# 5. ANA EKRAN
+# 5. ANA EKRAN (MOBİL UYUMLU)
 # ==============================================================================
 else:
     with st.sidebar:
@@ -191,7 +195,8 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["Teşhis & Reçete", "Bölgesel Veriler & Takvim", "Yardım & Bilgi"])
+    # Sekme isimlerini kısalttım ki mobilde sığsın
+    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi & Reçete", "🌤️ Bölgesel Hava Durumu ve Takvim", "ℹ️ Yardım"])
 
     # --- TAB 1: TEŞHİS ---
     with tab1:
@@ -222,9 +227,9 @@ else:
              elif bitki == "Kiraz (Cherry)": return ['Kiraz Külleme', 'Kiraz Sağlıklı']
              return ["Hastalık", "Sağlıklı"]
 
-        c1, c2 = st.columns(2)
-        with c1: secilen = st.selectbox("Bitki", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)", "Kiraz (Cherry)"])
-        with c2: dosya = st.file_uploader("Resim")
+        # DEĞİŞİKLİK: Kolonları (c1, c2) kaldırdık. Mobilde alt alta daha iyi görünür.
+        secilen = st.selectbox("Bitki Seçiniz:", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)", "Kiraz (Cherry)"])
+        dosya = st.file_uploader("Resim Yükleyiniz:")
 
         if dosya and st.button("Analiz Et"):
             with st.spinner("İnceleniyor..."):
@@ -283,12 +288,14 @@ else:
                     w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m"
                     w = requests.get(w_url).json()["current"]
                     
-                    st.subheader(f"📍 {sehir.upper()} Anlık Durum")
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1: st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
-                    with col2: st.metric("Nem", f"%{w['relative_humidity_2m']}")
-                    with col3: st.metric("Rüzgar Hızı", f"{w['wind_speed_10m']} km/s")
-                    with col4: st.metric("Rüzgar Yönü", f"{ruzgar_yonu_bul(w['wind_direction_10m'])}")
+                    st.subheader(f"📍 {sehir.upper()}")
+                    
+                    # DEĞİŞİKLİK: 4 kolonu (st.columns(4)) kaldırdık. Mobilde 4'ü yan yana sığmaz.
+                    # Alt alta sıralıyoruz. CSS ile aralarına boşluk ekledik.
+                    st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
+                    st.metric("Nem", f"%{w['relative_humidity_2m']}")
+                    st.metric("Rüzgar Hızı", f"{w['wind_speed_10m']} km/s")
+                    st.metric("Rüzgar Yönü", f"{ruzgar_yonu_bul(w['wind_direction_10m'])}")
                     
                     st.markdown("---")
                     aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
@@ -304,10 +311,5 @@ else:
         <div style="background-color: rgba(0, 0, 0, 0.6); padding: 20px; border-radius: 15px; border: 1px solid #4CAF50;">
             <h3>🌿 Yardım ve Bilgi</h3>
             <p>Bu uygulama çiftçilerimize yapay zeka desteği sunmak için geliştirilmiştir.</p>
-            <ul>
-                <li><b>Teşhis:</b> Bitki yaprağının fotoğrafını yükleyerek hastalık tespiti yapın.</li>
-                <li><b>Reçete:</b> Hastalık için kültürel ve ilaçlı mücadele yöntemlerini öğrenin.</li>
-                <li><b>Bölge:</b> Bulunduğunuz şehrin detaylı hava durumunu ve o aya özel tarım takvimini alın.</li>
-            </ul>
         </div>
         """, unsafe_allow_html=True)
