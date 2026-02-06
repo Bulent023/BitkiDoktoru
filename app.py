@@ -35,7 +35,6 @@ def tasariimi_uygula():
         <style>
         .stApp {{ {bg_image_style} background-attachment: fixed; background-size: cover; }}
         
-        /* --- MOBİL İÇİN KENAR BOŞLUKLARI --- */
         .block-container {{
             padding-top: 1rem !important;
             padding-bottom: 2rem !important;
@@ -43,7 +42,6 @@ def tasariimi_uygula():
             padding-right: 1rem !important;
         }}
 
-        /* --- MODERN BUTONLAR --- */
         div.stButton > button {{
             background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%);
             color: white; border: none; border-radius: 12px; padding: 12px 24px;
@@ -55,8 +53,7 @@ def tasariimi_uygula():
             background: linear-gradient(135deg, #1b5e20 0%, #388e3c 100%); color: white;
         }}
 
-        /* --- TAB (SEKME) KONUMLANDIRMA VE TASARIM --- */
-        /* Tab Container'ını komple aşağı itiyoruz (İSTEĞİNİZ ÜZERİNE 20px) */
+        /* --- SEKME KONUMU (50px AŞAĞI) --- */
         div[data-testid="stTabs"] {{
             margin-top: 50px !important; 
         }}
@@ -73,7 +70,6 @@ def tasariimi_uygula():
             background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%) !important; color: white !important;
             border: 1px solid #4CAF50; border-bottom: none; box-shadow: 0 -2px 10px rgba(76, 175, 80, 0.3); text-shadow: 0px 2px 4px rgba(0,0,0,0.5);
         }}
-        /* ------------------------------------ */
 
         section[data-testid="stSidebar"] {{ background-color: rgba(20, 30, 20, 0.95) !important; border-right: 1px solid #4CAF50; }}
         * {{ color: white; }}
@@ -160,7 +156,7 @@ def gemini_sor(prompt):
     except Exception as e: return f"Bağlantı Hatası: {e}"
 
 # ==============================================================================
-# 4. GİRİŞ EKRANI (KONUM DÜZENLEMESİ YAPILDI)
+# 4. GİRİŞ EKRANI
 # ==============================================================================
 if not st.session_state['giris_yapildi']:
     st.write("")
@@ -168,8 +164,6 @@ if not st.session_state['giris_yapildi']:
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
     if lottie_intro: st_lottie(lottie_intro, height=200) 
     
-    # --- BUTONU ORTALAMAK İÇİN BOŞLUK (SPACER) ---
-    # Bu boşluk butonu ekranın görsel ortasına/aşağısına iter.
     st.markdown("<br><br><br>", unsafe_allow_html=True) 
     
     if st.button("🚀 BAŞLAT (MODEL TARA)"):
@@ -197,8 +191,7 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    # Sekme isimlerini kısalttım ki mobilde sığsın
-    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi & Reçete", "🌤️ Bölgesel Hava Durumu ve Uygulama Takvim", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler", "ℹ️ Yardım"])
 
     # --- TAB 1: TEŞHİS ---
     with tab1:
@@ -275,13 +268,15 @@ else:
                 with st.spinner("..."):
                     st.write(gemini_sor(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}"))
 
-    # --- TAB 2: BÖLGE VE DETAYLI HAVA DURUMU ---
+    # --- TAB 2: BÖLGE VE DETAYLI HAVA DURUMU (OTOMATİK) ---
     with tab2:
         st.header("🌤️ Bölgesel Tarım Verileri")
         sehir = st.text_input("Şehir Giriniz:", value="Antalya")
         
-        if st.button("Verileri Getir"):
+        # --- OTOMATİK VERİ ÇEKME (BUTONSUZ) ---
+        if sehir:
             try:
+                # 1. Hava Durumu API'si (Sessizce çalışır)
                 geo = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1").json()
                 if "results" in geo:
                     lat = geo["results"][0]["latitude"]
@@ -289,21 +284,27 @@ else:
                     w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m"
                     w = requests.get(w_url).json()["current"]
                     
-                    st.subheader(f"📍 {sehir.upper()}")
+                    st.subheader(f"📍 {sehir.upper()} Anlık Durum")
                     
+                    # 4 Metrik alt alta
                     st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
                     st.metric("Nem", f"%{w['relative_humidity_2m']}")
                     st.metric("Rüzgar Hızı", f"{w['wind_speed_10m']} km/s")
                     st.metric("Rüzgar Yönü", f"{ruzgar_yonu_bul(w['wind_direction_10m'])}")
-                    
-                    st.markdown("---")
-                    aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
-                    simdiki_ay = aylar[int(time.strftime("%m")) - 1]
-                    with st.spinner("Takvim hazırlanıyor..."):
-                        takvim = gemini_sor(f"{simdiki_ay} ayında {sehir} tarım takvimi")
-                        st.info(takvim)
-                else: st.error("Şehir bulunamadı.")
-            except: st.error("Veri alınamadı.")
+                else:
+                    st.warning("Şehir bulunamadı.")
+            except:
+                st.error("Hava durumu sunucusuna bağlanılamadı.")
+
+        st.markdown("---")
+        
+        # --- TAKVİM BUTONU ---
+        if st.button("📅 Uygulama Takvimini Getir"):
+             aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+             simdiki_ay = aylar[int(time.strftime("%m")) - 1]
+             with st.spinner(f"{simdiki_ay} ayı için takvim hazırlanıyor..."):
+                 takvim = gemini_sor(f"{simdiki_ay} ayında {sehir} tarım takvimi ve yapılacaklar listesi. Madde madde yaz.")
+                 st.info(takvim)
 
     with tab3:
         st.markdown("""
