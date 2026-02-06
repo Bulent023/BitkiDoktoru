@@ -188,7 +188,7 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler ve Uygulama Takvimi", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler ve Uygulama Raporu", "ℹ️ Yardım"])
 
     # --- TAB 1: TEŞHİS ---
     with tab1:
@@ -234,14 +234,14 @@ else:
         dosya = st.file_uploader("Resim Yükleyiniz:")
 
         if dosya:
-             # Resmin önizlemesini gösterelim (Kullanıcı ne yüklediğini görsün)
+             # Resmin önizlemesini gösterelim
              st.image(Image.open(dosya), width=200)
 
         if dosya and st.button("Analiz Et"):
             with st.spinner("İnceleniyor..."):
                 model = model_yukle(secilen)
                 if model:
-                    # --- HATA DÜZELTİLDİ: image = Image.open(dosya) EKLENDİ ---
+                    # --- RESMİ YÜKLEME KODU EKLENDİ ---
                     image = Image.open(dosya) 
                     img = image.resize((160,160))
                     img_arr = np.array(img).astype("float32")
@@ -279,8 +279,17 @@ else:
             st.markdown("---")
             soru = st.text_input("Asistana Sor:")
             if st.button("Gönder"):
-                with st.spinner("..."):
-                    st.write(gemini_sor(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}"))
+                with st.spinner("Asistan düşünüyor..."):
+                    cevap = gemini_sor(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}")
+                    
+                    # --- YENİ EKLENEN KISIM: ASİSTAN CEVABI İÇİN STİL KUTUSU ---
+                    st.markdown(f"""
+                    <div style="background-color: rgba(30, 60, 30, 0.85); padding: 15px; border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.5); margin-top: 10px; color: #e0e0e0;">
+                        <b>🤖 Asistan:</b><br>
+                        {cevap}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    # -----------------------------------------------------------
 
     # --- TAB 2: BÖLGE VE DETAYLI HAVA DURUMU ---
     with tab2:
