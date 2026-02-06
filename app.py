@@ -18,12 +18,13 @@ if 'giris_yapildi' not in st.session_state: st.session_state['giris_yapildi'] = 
 if 'son_teshis' not in st.session_state: st.session_state['son_teshis'] = None
 if 'son_bitki' not in st.session_state: st.session_state['son_bitki'] = None
 if 'recete_hafizasi' not in st.session_state: st.session_state['recete_hafizasi'] = ""
+if 'calisan_model_ismi' not in st.session_state: st.session_state['calisan_model_ismi'] = None
 
 # --- CSS ---
 def tasariimi_uygula():
     bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
-    if os.path.exists("arka_plan.jpg"):
-        with open("arka_plan.jpg", "rb") as image_file:
+    if os.path.exists("arkaplan.jpg"):
+        with open("arkaplan.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image_style = f'background-image: url("data:image/jpg;base64,{encoded_string}");'
 
@@ -35,10 +36,12 @@ def tasariimi_uygula():
             display: block !important; margin-left: auto !important; margin-right: auto !important;
             width: 70% !important; border-radius: 25px; font-weight: bold; font-size: 18px;
             background-color: #ff4b4b; color: white; border: 2px solid white;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
         }}
         section[data-testid="stSidebar"] {{ background-color: rgba(15, 25, 15, 0.95) !important; }}
         * {{ color: white; }}
-        div.stError {{ background-color: rgba(255, 0, 0, 0.8) !important; color: white !important; font-weight: bold; }}
+        div.stSuccess {{ background-color: rgba(0, 50, 0, 0.8) !important; }}
+        div.stError {{ background-color: rgba(50, 0, 0, 0.8) !important; }}
         </style>
         """, unsafe_allow_html=True
     )
@@ -50,8 +53,12 @@ def load_lottieurl(url):
 
 def tr_duzelt(text):
     if not isinstance(text, str): text = str(text)
-    # Basit temizlik
-    return text.replace("İ", "I").replace("ı", "i").replace("Ğ", "G").replace("ğ", "g").replace("Ş", "S").replace("ş", "s")
+    source = "şŞıİğĞüÜöÖçÇ"
+    target = "sSiIgGuUoOcC"
+    translation_table = str.maketrans(source, target)
+    text = text.translate(translation_table)
+    text = text.encode('latin-1', 'ignore').decode('latin-1')
+    return text
 
 def create_pdf(bitki, hastalik, recete):
     pdf = FPDF()
@@ -60,47 +67,78 @@ def create_pdf(bitki, hastalik, recete):
     pdf.cell(200, 10, txt="RAPOR", ln=1, align='C')
     pdf.ln(10)
     pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, txt=tr_duzelt(f"Bitki: {bitki}\nTeshis: {hastalik}\n\n{recete}"))
+    pdf.multi_cell(0, 10, txt=tr_duzelt(f"Bitki: {bitki}\nDurum: {hastalik}\n\n{recete}"))
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
-# 2. HATA AVLAYICI GEMINI FONKSİYONU 🕵️‍♂️
+# 2. AKILLI MODEL BULUCU (BU KISIM HATAYI ÇÖZECEK) 🧠
 # ==============================================================================
+def model_bul_ve_getir(api_key):
+    """Google'a sorar: Hangi modellerin var? Çalışanı seçer."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            modeller = response.json().get('models', [])
+            
+            # İçinde 'generateContent' yeteneği olan modelleri bul
+            uygun_modeller = []
+            for m in modeller:
+                if 'generateContent' in m.get('supportedGenerationMethods', []):
+                    # Öncelik: Flash > Pro > Diğerleri
+                    if 'flash' in m['name']:
+                        return m['name'] # En iyiyi bulduk, hemen döndür
+                    uygun_modeller.append(m['name'])
+            
+            # Flash yoksa listedeki ilk uygun modeli (genellikle gemini-pro) döndür
+            if uygun_modeller:
+                return uygun_modeller[0]
+                
+        return None # Liste alınamadı
+    except:
+        return None
+
 def gemini_sor(prompt):
     if "GOOGLE_API_KEY" not in st.secrets:
-        return "KRİTİK HATA: Secrets içinde GOOGLE_API_KEY bulunamadı! Lütfen ayarlardan ekleyin."
+        return "HATA: API Anahtarı Yok."
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # Bu modelleri sırayla deneyecek ve hataları biriktirecek
-    modeller = ["gemini-pro", "gemini-1.5-flash", "gemini-1.5-pro"]
-    
-    hata_raporu = [] # Hataları burada toplayacağız
-    
+    # 1. Eğer hafızada çalışan model yoksa, git bul.
+    if st.session_state['calisan_model_ismi'] is None:
+        bulunan = model_bul_ve_getir(api_key)
+        if bulunan:
+            st.session_state['calisan_model_ismi'] = bulunan
+        else:
+            # Bulamazsa manuel fallback yapalım (Son çare)
+            st.session_state['calisan_model_ismi'] = "models/gemini-1.5-flash"
+
+    # Model isminin başındaki 'models/' kısmını ayarlayalım
+    model_id = st.session_state['calisan_model_ismi']
+    if not model_id.startswith("models/"):
+        model_id = f"models/{model_id}"
+
+    # 2. İsteği Gönder
+    url = f"https://generativelanguage.googleapis.com/v1beta/{model_id}:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
     data = {"contents": [{"parts": [{"text": prompt}]}]}
-
-    for model_ismi in modeller:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_ismi}:generateContent?key={api_key}"
-        
-        try:
-            response = requests.post(url, headers=headers, json=data)
-            
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            else:
-                # Hata kodunu kaydet (Örn: 400 Bad Request, 403 Permission Denied)
-                hata_detayi = response.json().get('error', {}).get('message', response.text)
-                hata_raporu.append(f"❌ {model_ismi}: Kod {response.status_code} - {hata_detayi}")
-                
-        except Exception as e:
-            hata_raporu.append(f"❌ {model_ismi}: Bağlantı Hatası - {str(e)}")
-
-    # Eğer buraya geldiyse hepsi başarısız olmuştur.
-    return "TÜM MODELLER BAŞARISIZ OLDU:\n" + "\n".join(hata_raporu)
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        elif response.status_code == 404:
+            # Eğer seçilen model de 404 verdiyse hafızayı sil, bir dahakine yeniden arasın
+            st.session_state['calisan_model_ismi'] = None
+            return "Model anlık bulunamadı, tekrar deneyiniz."
+        else:
+            return f"HATA ({model_id}): {response.status_code} - {response.text}"
+    except Exception as e:
+        return f"Bağlantı Hatası: {e}"
 
 # ==============================================================================
-# 3. ARAYÜZ
+# 3. GİRİŞ VE ARAYÜZ
 # ==============================================================================
 if not st.session_state['giris_yapildi']:
     st.write("")
@@ -108,31 +146,37 @@ if not st.session_state['giris_yapildi']:
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
     if lottie_intro: st_lottie(lottie_intro, height=250)
     
-    # GİRİŞTE TEST ET (Anahtarı hemen doğrula)
-    if st.button("🚀 BAŞLAT VE TEST ET"):
-        test_cevap = gemini_sor("Test")
-        if "TÜM MODELLER BAŞARISIZ" in test_cevap:
-            st.error(test_cevap) # Detaylı hatayı göster
-            st.warning("Lütfen API anahtarınızın doğru olduğundan ve 'Secrets' kısmına kaydedildiğinden emin olun.")
-        elif "KRİTİK HATA" in test_cevap:
-            st.error(test_cevap)
+    if st.button("🚀 BAŞLAT (MODEL TARA)"):
+        # Başlarken bir test yapalım
+        if "GOOGLE_API_KEY" in st.secrets:
+            test = model_bul_ve_getir(st.secrets["GOOGLE_API_KEY"])
+            if test:
+                st.session_state['calisan_model_ismi'] = test
+                st.success(f"Bağlantı Kuruldu! Model: {test}")
+                time.sleep(1)
+                st.session_state['giris_yapildi'] = True
+                st.rerun()
+            else:
+                st.error("API Anahtarı doğru ancak Google sunucularından model listesi alınamadı. Lütfen anahtarın 'Generative Language API' yetkisi olduğundan emin olun.")
         else:
-            st.success("Bağlantı Başarılı!")
-            time.sleep(1)
-            st.session_state['giris_yapildi'] = True
-            st.rerun()
+            st.error("Secrets kısmında API anahtarı yok!")
 
 else:
     with st.sidebar:
         st.title("Ziraat AI")
+        if st.session_state['calisan_model_ismi']:
+            # Temiz isim göster
+            gosterim_ismi = st.session_state['calisan_model_ismi'].replace("models/", "")
+            st.info(f"🤖 {gosterim_ismi}")
+        
         if st.button("Çıkış"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    tab1, tab2 = st.tabs(["Teşhis", "Bölge"])
+    tab1, tab2, tab3 = st.tabs(["Hastalık Teşhisi", "Bölgesel Veriler", "Yardım"])
 
     with tab1:
-        # Basitleştirilmiş Model Yükleme
+        st.subheader("Fotoğraf Analizi")
         @st.cache_resource
         def model_yukle(bitki):
             mapper = {
@@ -146,26 +190,87 @@ else:
                 try: return tf.keras.models.load_model(mapper[bitki])
                 except: return None
             return None
-            
-        secilen = st.selectbox("Bitki", ["Elma (Apple)", "Domates (Tomato)", "Patates (Potato)"])
-        dosya = st.file_uploader("Resim")
         
+        def siniflari_al(bitki):
+             if bitki == "Elma (Apple)": return ['Elma Kara Leke', 'Elma Kara Çürüklüğü', 'Elma Sedir Pası', 'Elma Sağlıklı']
+             elif bitki == "Domates (Tomato)": return ['Bakteriyel Leke', 'Erken Yanıklık', 'Geç Yanıklık', 'Yaprak Küfü', 'Septoria Yaprak Lekesi', 'Örümcek Akarları', 'Hedef Leke', 'Sarı Yaprak Kıvırcıklığı', 'Mozaik Virüsü', 'Sağlıklı']
+             elif bitki == "Mısır (Corn)": return ['Mısır Gri Yaprak Lekesi', 'Mısır Yaygın Pas', 'Mısır Kuzey Yaprak Yanıklığı', 'Mısır Sağlıklı']
+             elif bitki == "Patates (Potato)": return ['Patates Erken Yanıklık', 'Patates Geç Yanıklık', 'Patates Sağlıklı']
+             elif bitki == "Üzüm (Grape)": return ['Üzüm Kara Çürüklüğü', 'Üzüm Siyah Kızamık (Esca)', 'Üzüm Yaprak Yanıklığı', 'Üzüm Sağlıklı']
+             elif bitki == "Biber (Pepper)": return ['Biber Bakteriyel Leke', 'Biber Sağlıklı']
+             elif bitki == "Şeftali (Peach)": return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
+             elif bitki == "Çilek (Strawberry)": return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
+             elif bitki == "Kiraz (Cherry)": return ['Kiraz Külleme', 'Kiraz Sağlıklı']
+             return ["Hastalık", "Sağlıklı"]
+
+        c1, c2 = st.columns(2)
+        with c1: secilen = st.selectbox("Bitki", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)", "Kiraz (Cherry)"])
+        with c2: dosya = st.file_uploader("Resim")
+
         if dosya and st.button("Analiz Et"):
-             # (Model tahmin kısmı burada normal çalışacak, sadece Gemini kısmını test ediyoruz)
-             st.success("Analiz Simülasyonu Başarılı") 
-             with st.spinner("Reçete yazılıyor..."):
-                 cevap = gemini_sor(f"{secilen} bitkisi hakkında kısa bilgi ver.")
-                 if "BAŞARISIZ" in cevap:
-                     st.error(cevap)
-                 else:
-                     st.info(cevap)
+            with st.spinner("İnceleniyor..."):
+                model = model_yukle(secilen)
+                if model:
+                    img = image.resize((160,160))
+                    img_arr = np.array(img).astype("float32")
+                    if img_arr.ndim==2: img_arr=np.stack((img_arr,)*3, axis=-1)
+                    elif img_arr.shape[-1]==4: img_arr=img_arr[:,:,:3]
+                    img_arr = img_arr[...,::-1] 
+                    input_data = np.expand_dims(img_arr, axis=0)
+                    
+                    try:
+                        tahmin = model.predict(input_data)
+                        idx = np.argmax(tahmin)
+                        siniflar = siniflari_al(secilen)
+                        sonuc = siniflar[idx] if idx < len(siniflar) else f"Tespit: {idx}"
+                        
+                        st.session_state['son_teshis'] = sonuc
+                        st.session_state['son_bitki'] = secilen
+                        
+                        if "Sağlıklı" in sonuc:
+                            st.success(f"✅ {sonuc}")
+                            st.balloons()
+                            st.session_state['recete_hafizasi'] = "Bitki sağlıklı."
+                        else:
+                            st.error(f"⚠️ {sonuc}")
+                            prompt = f"Bitki: {secilen}, Hastalık: {sonuc}. Bu hastalık için 3 başlıkta bilgi ver: 1-Nedir, 2-Kültürel Önlem, 3-İlaçlı Mücadele."
+                            st.session_state['recete_hafizasi'] = gemini_sor(prompt)
+                    except Exception as e: st.error(f"Hata: {e}")
+
+        if st.session_state['son_teshis']:
+            st.markdown("---")
+            with st.expander("Reçete", expanded=True):
+                st.write(st.session_state['recete_hafizasi'])
+            
+            try:
+                pdf_data = create_pdf(st.session_state['son_bitki'], st.session_state['son_teshis'], st.session_state['recete_hafizasi'])
+                st.download_button("Rapor İndir", pdf_data, "rapor.pdf", "application/pdf")
+            except: pass
+            
+            st.markdown("---")
+            soru = st.text_input("Asistana Sor:")
+            if st.button("Gönder"):
+                with st.spinner("..."):
+                    st.write(gemini_sor(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}"))
 
     with tab2:
         sehir = st.text_input("Şehir", "Antalya")
-        if st.button("Veri Getir"):
-            with st.spinner("Takvim hazırlanıyor..."):
-                cevap = gemini_sor(f"{sehir} için tarım takvimi")
-                if "BAŞARISIZ" in cevap:
-                    st.error(cevap)
-                else:
-                    st.success(cevap)
+        if st.button("Verileri Getir"):
+            try:
+                geo = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1").json()
+                if "results" in geo:
+                    lat = geo["results"][0]["latitude"]
+                    lon = geo["results"][0]["longitude"]
+                    w = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,wind_speed_10m").json()["current"]
+                    st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
+                    
+                    st.markdown("---")
+                    aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+                    simdiki_ay = aylar[int(time.strftime("%m")) - 1]
+                    with st.spinner("Takvim hazırlanıyor..."):
+                        takvim = gemini_sor(f"{simdiki_ay} ayında {sehir} tarım takvimi")
+                        st.info(takvim)
+            except: st.error("Hata")
+
+    with tab3:
+        st.write("Yardım bölümü.")
