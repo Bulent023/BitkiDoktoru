@@ -73,9 +73,8 @@ def tasariimi_uygula():
         input[type="text"] {{ background-color: rgba(255, 255, 255, 0.1) !important; color: white !important; border: 1px solid #4CAF50 !important; border-radius: 8px; }}
         div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.6); border-radius: 10px; border: 1px solid #4CAF50; }}
         
-        /* Metrik Kutuları (Daha kompakt) */
         div[data-testid="stMetric"] {{ 
-            background-color: rgba(30, 60, 30, 0.85) !important; padding: 5px; border-radius: 8px; 
+            background-color: rgba(30, 60, 30, 0.85) !important; padding: 10px; border-radius: 12px; 
             text-align: center; border: 1px solid rgba(76, 175, 80, 0.5); 
             margin-bottom: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
         }}
@@ -189,7 +188,7 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler ve Uygulama Takvimi", "ℹ️ Yardım"])
 
     # --- TAB 1: TEŞHİS ---
     with tab1:
@@ -201,7 +200,8 @@ else:
                 "Mısır (Corn)": "corn_uzman_model.keras", "Üzüm (Grape)": "grape_uzman_model.keras",
                 "Patates (Potato)": "potato_uzman_model.keras", "Biber (Pepper)": "pepper_uzman_model.keras",
                 "Şeftali (Peach)": "peach_uzman_model.keras", "Çilek (Strawberry)": "strawberry_uzman_model.keras",
-                "Kiraz (Cherry)": "cherry_uzman_model.keras"
+                "Kiraz (Cherry)": "cherry_uzman_model.keras",
+                "Ceviz (Walnut)": "walnut_uzman_model.keras"  # <-- CEVİZ EKLENDİ
             }
             if bitki in mapper:
                 try: return tf.keras.models.load_model(mapper[bitki])
@@ -218,9 +218,28 @@ else:
              elif bitki == "Şeftali (Peach)": return ['Şeftali Bakteriyel Leke', 'Şeftali Sağlıklı']
              elif bitki == "Çilek (Strawberry)": return ['Çilek Yaprak Yanıklığı', 'Çilek Sağlıklı']
              elif bitki == "Kiraz (Cherry)": return ['Kiraz Külleme', 'Kiraz Sağlıklı']
+             
+             # --- CEVİZ SINIFLARI (EĞİTİM SIRASINA GÖRE) ---
+             elif bitki == "Ceviz (Walnut)": 
+                 return [
+                     'Ceviz Antraknoz',           # 0
+                     'Ceviz Leke Hastalığı',      # 1
+                     'Ceviz Sağlıklı',            # 2 (Normal)
+                     'Ceviz Yaprak Delen (Çil)',  # 3 (Shot hole)
+                     'Ceviz Yaprak Uyuzu (Akar)'  # 4 (Gall mite)
+                 ]
+             # ----------------------------------------------
+             
              return ["Hastalık", "Sağlıklı"]
 
-        secilen = st.selectbox("Bitki Seçiniz:", ["Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", "Şeftali (Peach)", "Çilek (Strawberry)", "Kiraz (Cherry)"])
+        # SEÇİM KUTUSUNA CEVİZ EKLENDİ
+        secilen = st.selectbox("Bitki Seçiniz:", [
+            "Elma (Apple)", "Domates (Tomato)", "Mısır (Corn)", 
+            "Patates (Potato)", "Üzüm (Grape)", "Biber (Pepper)", 
+            "Şeftali (Peach)", "Çilek (Strawberry)", "Kiraz (Cherry)",
+            "Ceviz (Walnut)"
+        ])
+        
         dosya = st.file_uploader("Resim Yükleyiniz:")
 
         if dosya and st.button("Analiz Et"):
@@ -302,11 +321,10 @@ else:
                  takvim = gemini_sor(f"{simdiki_ay} ayında {sehir} tarım takvimi ve yapılacaklar listesi. Madde madde yaz.")
                  st.info(takvim)
 
-    # --- TAB 3: YARDIM VE BİLGİ (DETAYLI AÇIKLAMA) ---
+    # --- TAB 3: YARDIM VE BİLGİ ---
     with tab3:
         st.markdown("### ❓ Sıkça Sorulan Sorular ve Kullanım Kılavuzu")
 
-        # Box 1: Nasıl Çalışır?
         st.markdown("""
         <div style="background-color: rgba(30, 60, 30, 0.85); padding: 15px; border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.5); margin-bottom: 10px;">
             <h4 style="color: #4CAF50;">🔍 Hastalık Teşhisi Nasıl Yapılıyor?</h4>
@@ -318,7 +336,6 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-        # Box 2: Veri Kullanımı
         st.markdown("""
         <div style="background-color: rgba(30, 60, 30, 0.85); padding: 15px; border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.5); margin-bottom: 10px;">
             <h4 style="color: #4CAF50;">📊 Hangi Veriler Kullanılıyor?</h4>
@@ -330,7 +347,6 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-        # Box 3: Bölgesel Veriler
         st.markdown("""
         <div style="background-color: rgba(30, 60, 30, 0.85); padding: 15px; border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.5); margin-bottom: 10px;">
             <h4 style="color: #4CAF50;">🌤️ Bölgesel Veriler Neleri İçerir?</h4>
