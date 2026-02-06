@@ -73,14 +73,21 @@ def tasariimi_uygula():
         input[type="text"] {{ background-color: rgba(255, 255, 255, 0.1) !important; color: white !important; border: 1px solid #4CAF50 !important; border-radius: 8px; }}
         div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.6); border-radius: 10px; border: 1px solid #4CAF50; }}
         
-        /* Metrik Kutuları (Daha kompakt) */
+        /* --- DEĞİŞİKLİK BURADA: Metrik Kutuları (KOYU YEŞİL ARKA PLAN) --- */
         div[data-testid="stMetric"] {{ 
-            background-color: rgba(255, 255, 255, 0.1); padding: 5px; border-radius: 8px; 
-            text-align: center; border: 1px solid rgba(255,255,255,0.2); 
+            background-color: rgba(30, 60, 30, 0.85) !important; /* Koyu Yarı Saydam Yeşil */
+            padding: 10px; 
+            border-radius: 12px; 
+            text-align: center; 
+            border: 1px solid rgba(76, 175, 80, 0.5); /* Yeşil çerçeve */
             margin-bottom: 5px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3); /* Hafif gölge */
         }}
+        /* Etiket rengi (Hafif gri) */
         div[data-testid="stMetricLabel"] {{ color: #e0e0e0 !important; font-size: 14px !important; }}
+        /* Değer rengi (Parlak yeşil) */
         div[data-testid="stMetricValue"] {{ color: #4CAF50 !important; font-weight: bold; font-size: 20px !important; }}
+        /* ----------------------------------------------------------------- */
         
         </style>
         """, unsafe_allow_html=True
@@ -266,7 +273,7 @@ else:
                 with st.spinner("..."):
                     st.write(gemini_sor(f"Konu: {st.session_state['son_teshis']}, Soru: {soru}"))
 
-    # --- TAB 2: BÖLGE VE DETAYLI HAVA DURUMU (2x2 IZGARA) ---
+    # --- TAB 2: BÖLGE VE DETAYLI HAVA DURUMU (2x2 IZGARA - KOYU YEŞİL) ---
     with tab2:
         st.header("🌤️ Bölgesel Tarım Verileri")
         sehir = st.text_input("Şehir Giriniz:", value="Antalya")
@@ -283,13 +290,11 @@ else:
                     
                     st.subheader(f"📍 {sehir.upper()} Anlık Durum")
                     
-                    # DEĞİŞİKLİK: 2x2 Izgara (Grid) Düzeni
-                    # 1. Satır: Sıcaklık ve Nem
+                    # 2x2 Izgara (Grid) Düzeni
                     c1, c2 = st.columns(2)
                     with c1: st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
                     with c2: st.metric("Nem", f"%{w['relative_humidity_2m']}")
                     
-                    # 2. Satır: Rüzgar ve Yön
                     c3, c4 = st.columns(2)
                     with c3: st.metric("Rüzgar Hızı", f"{w['wind_speed_10m']} km/s")
                     with c4: st.metric("Rüzgar Yönü", f"{ruzgar_yonu_bul(w['wind_direction_10m'])}")
