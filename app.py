@@ -188,7 +188,7 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler ve Uygulşama Takvimi", "ℹ️ Yardım"])
+    tab1, tab2, tab3 = st.tabs(["🌿 Hastalık Teşhisi", "🌤️ Bölgesel Veriler ve Uygulama Takvimi", "ℹ️ Yardım"])
 
     # --- TAB 1: TEŞHİS ---
     with tab1:
