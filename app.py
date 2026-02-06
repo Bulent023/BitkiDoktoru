@@ -21,12 +21,12 @@ if 'recete_hafizasi' not in st.session_state: st.session_state['recete_hafizasi'
 if 'calisan_model_ismi' not in st.session_state: st.session_state['calisan_model_ismi'] = None
 
 # ==============================================================================
-# 2. MODERN TASARIM (CSS) 🎨
+# 2. MODERN TASARIM (CSS) - TAB GRADYANLARI EKLENDİ 🎨
 # ==============================================================================
 def tasariimi_uygula():
     bg_image_style = 'background-image: url("https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1527&auto=format&fit=crop");'
-    if os.path.exists("arkaplan.jpg"):
-        with open("arkaplan.jpg", "rb") as image_file:
+    if os.path.exists("arka_plan.jpg"):
+        with open("arka_plan.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image_style = f'background-image: url("data:image/jpg;base64,{encoded_string}");'
 
@@ -37,54 +37,51 @@ def tasariimi_uygula():
         
         /* --- MODERN BUTONLAR --- */
         div.stButton > button {{
-            background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%); /* Modern Yeşil Gradyan */
-            color: white;
-            border: none;
-            border-radius: 12px; /* Yumuşak köşeler */
-            padding: 12px 24px;
-            font-weight: 600;
-            font-size: 16px;
-            letter-spacing: 0.5px;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            width: 100%;
+            background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%);
+            color: white; border: none; border-radius: 12px; padding: 12px 24px;
+            font-weight: 600; font-size: 16px; letter-spacing: 0.5px;
+            transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.2); width: 100%;
         }}
-        
         div.stButton > button:hover {{
-            transform: translateY(-2px); /* Tıklama hissi */
-            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
-            background: linear-gradient(135deg, #1b5e20 0%, #388e3c 100%);
-            color: white;
-            border-color: transparent;
-        }}
-        
-        div.stButton > button:active {{
-            transform: translateY(0);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+            background: linear-gradient(135deg, #1b5e20 0%, #388e3c 100%); color: white;
         }}
         /* ----------------------- */
 
+        /* --- TAB (SEKME) GRADYAN TASARIMI --- */
+        /* Tüm sekmelerin genel yapısı */
+        div[data-testid="stTabs"] button {{
+            background: linear-gradient(to bottom, rgba(40, 60, 40, 0.85), rgba(20, 30, 20, 0.95)); /* Koyu yarı saydam gradyan */
+            color: #e0e0e0 !important; /* Hafif kırık beyaz yazı */
+            border-radius: 15px 15px 0 0; /* Sadece üst köşeleri yuvarla */
+            margin-right: 5px; /* Sekmeler arası boşluk */
+            border: 1px solid rgba(76, 175, 80, 0.3); border-bottom: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-shadow: 0px 1px 2px rgba(0,0,0,0.8); /* Yazının okunmasını sağlayan gölge */
+        }}
+
+        /* Üzerine gelince (Hover) */
+        div[data-testid="stTabs"] button:hover {{
+             background: linear-gradient(to bottom, rgba(60, 90, 60, 0.95), rgba(30, 50, 30, 1));
+             color: #4CAF50 !important; /* Yazı yeşil olsun */
+        }}
+
+        /* Aktif (Seçili) Sekme */
+        div[data-testid="stTabs"] button[aria-selected="true"] {{
+            background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%) !important; /* Canlı yeşil gradyan */
+            color: white !important;
+            border: 1px solid #4CAF50; border-bottom: none;
+            box-shadow: 0 -2px 10px rgba(76, 175, 80, 0.3); /* Hafif bir parlama efekti */
+            text-shadow: 0px 2px 4px rgba(0,0,0,0.5);
+        }}
+        /* ------------------------------------ */
+
         section[data-testid="stSidebar"] {{ background-color: rgba(20, 30, 20, 0.95) !important; border-right: 1px solid #4CAF50; }}
         * {{ color: white; }}
-        input[type="text"] {{ 
-            background-color: rgba(255, 255, 255, 0.1) !important; 
-            color: white !important; 
-            border: 1px solid #4CAF50 !important; 
-            border-radius: 8px;
-        }}
-        div[data-testid="stExpander"] {{ 
-            background-color: rgba(0, 0, 0, 0.6); 
-            border-radius: 10px; 
-            border: 1px solid #4CAF50;
-        }}
-        /* Metrik Kutuları */
-        div[data-testid="stMetric"] {{
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 10px;
-            border-radius: 10px;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.2);
-        }}
+        input[type="text"] {{ background-color: rgba(255, 255, 255, 0.1) !important; color: white !important; border: 1px solid #4CAF50 !important; border-radius: 8px; }}
+        div[data-testid="stExpander"] {{ background-color: rgba(0, 0, 0, 0.6); border-radius: 10px; border: 1px solid #4CAF50; }}
+        div[data-testid="stMetric"] {{ background-color: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.2); }}
         div[data-testid="stMetricLabel"] {{ color: #e0e0e0 !important; }}
         div[data-testid="stMetricValue"] {{ color: #4CAF50 !important; font-weight: bold; }}
         
@@ -107,7 +104,6 @@ def tr_duzelt(text):
     return text
 
 def ruzgar_yonu_bul(derece):
-    """Rüzgar derecesini (0-360) yön ismine çevirir."""
     yonler = ["Kuzey", "Kuzeydoğu", "Doğu", "Güneydoğu", "Güney", "Güneybatı", "Batı", "Kuzeybatı"]
     index = round(derece / 45) % 8
     return yonler[index]
@@ -143,28 +139,21 @@ def model_bul_ve_getir(api_key):
 def gemini_sor(prompt):
     if "GOOGLE_API_KEY" not in st.secrets: return "HATA: API Anahtarı Yok."
     api_key = st.secrets["GOOGLE_API_KEY"]
-    
     if st.session_state['calisan_model_ismi'] is None:
         bulunan = model_bul_ve_getir(api_key)
-        if bulunan: st.session_state['calisan_model_ismi'] = bulunan
-        else: st.session_state['calisan_model_ismi'] = "models/gemini-1.5-flash"
-
+        st.session_state['calisan_model_ismi'] = bulunan if bulunan else "models/gemini-1.5-flash"
     model_id = st.session_state['calisan_model_ismi']
     if not model_id.startswith("models/"): model_id = f"models/{model_id}"
-
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_id}:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
     data = {"contents": [{"parts": [{"text": prompt}]}]}
-    
     try:
         response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        if response.status_code == 200: return response.json()['candidates'][0]['content']['parts'][0]['text']
         elif response.status_code == 404:
             st.session_state['calisan_model_ismi'] = None
             return "Model anlık bulunamadı, tekrar deneyiniz."
-        else:
-            return f"HATA ({model_id}): {response.status_code}"
+        else: return f"HATA ({model_id}): {response.status_code}"
     except Exception as e: return f"Bağlantı Hatası: {e}"
 
 # ==============================================================================
@@ -175,7 +164,6 @@ if not st.session_state['giris_yapildi']:
     st.markdown("<h1 style='text-align: center;'>🌿 Ziraat AI</h1>", unsafe_allow_html=True)
     lottie_intro = load_lottieurl("https://lottie.host/62688176-784f-4d22-8280-5b1191062085/WkL0s7l9Xj.json")
     if lottie_intro: st_lottie(lottie_intro, height=250)
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🚀 BAŞLAT (MODEL TARA)"):
@@ -203,7 +191,7 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["Akıllı Hastalık Teşhisi", "Bölgesel Veriler", "Yardım"])
+    tab1, tab2, tab3 = st.tabs(["Teşhis & Reçete", "Bölgesel Veriler & Takvim", "Yardım & Bilgi"])
 
     # --- TAB 1: TEŞHİS ---
     with tab1:
@@ -288,29 +276,19 @@ else:
         
         if st.button("Verileri Getir"):
             try:
-                # 1. Hava Durumu (API Güncellendi)
                 geo = requests.get(f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1").json()
                 if "results" in geo:
                     lat = geo["results"][0]["latitude"]
                     lon = geo["results"][0]["longitude"]
-                    # YENİ API ÇAĞRISI: Rüzgar yönü ve nem eklendi
                     w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m"
                     w = requests.get(w_url).json()["current"]
                     
                     st.subheader(f"📍 {sehir.upper()} Anlık Durum")
-                    
-                    # 4 SÜTUNLU MODERN GÖSTERİM
                     col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
-                    with col2:
-                        st.metric("Nem", f"%{w['relative_humidity_2m']}")
-                    with col3:
-                        st.metric("Rüzgar Hızı", f"{w['wind_speed_10m']} km/s")
-                    with col4:
-                        yon_isim = ruzgar_yonu_bul(w['wind_direction_10m'])
-                        st.metric("Rüzgar Yönü", f"{yon_isim}")
+                    with col1: st.metric("Sıcaklık", f"{w['temperature_2m']} °C")
+                    with col2: st.metric("Nem", f"%{w['relative_humidity_2m']}")
+                    with col3: st.metric("Rüzgar Hızı", f"{w['wind_speed_10m']} km/s")
+                    with col4: st.metric("Rüzgar Yönü", f"{ruzgar_yonu_bul(w['wind_direction_10m'])}")
                     
                     st.markdown("---")
                     aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
@@ -323,9 +301,13 @@ else:
 
     with tab3:
         st.markdown("""
-        <div style="background-color: rgba(0, 0, 0, 0.5); padding: 20px; border-radius: 10px;">
-            <h3>Yardım</h3>
-            <p>1. <b>Teşhis</b> sekmesinden fotoğraf yükleyin.</p>
-            <p>2. <b>Bölge</b> sekmesinden detaylı hava durumuna bakın.</p>
+        <div style="background-color: rgba(0, 0, 0, 0.6); padding: 20px; border-radius: 15px; border: 1px solid #4CAF50;">
+            <h3>🌿 Yardım ve Bilgi</h3>
+            <p>Bu uygulama çiftçilerimize yapay zeka desteği sunmak için geliştirilmiştir.</p>
+            <ul>
+                <li><b>Teşhis:</b> Bitki yaprağının fotoğrafını yükleyerek hastalık tespiti yapın.</li>
+                <li><b>Reçete:</b> Hastalık için kültürel ve ilaçlı mücadele yöntemlerini öğrenin.</li>
+                <li><b>Bölge:</b> Bulunduğunuz şehrin detaylı hava durumunu ve o aya özel tarım takvimini alın.</li>
+            </ul>
         </div>
         """, unsafe_allow_html=True)
